@@ -45,6 +45,20 @@ object PGUtils {
     }
   }
 
+  def dropDBIfExists(jdbcNoDBUrl: String, dbName: String, user: String, pwd: String): Unit = {
+    println(s"dropping db $dbName")
+    //val onlyHostNoDbUrl = s"jdbc:postgresql://$host/"
+    try {
+      using(Database.forURL(jdbcNoDBUrl, user = user, password = pwd, driver = driver)) { conn =>
+        Await.result(conn.run(sqlu"DROP DATABASE IF EXISTS #$dbName"), actionTimeout)
+      }
+    } catch {
+      // ignore failure due to db not exist
+      case e:PSQLException => if (e.getMessage.equals(s""""database "$dbName" does not exist""")) {/* do nothing */}
+      case e:Throwable => throw e // escalate other exceptions
+    }
+  }
+
   // This function needs to be fleshed out slightly - tests currently rely on catching exceptions
   //  to verify that a db already exists
   //def dbExists(jdbcNoDBUrl: String, dbName: String, user: String, pwd: String): Boolean = {

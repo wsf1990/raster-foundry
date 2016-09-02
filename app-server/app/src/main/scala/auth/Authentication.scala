@@ -17,10 +17,10 @@ import com.azavea.rf.user.UserService
 
 trait Authentication extends Directives with Config {
 
-  implicit val database: Database
+  implicit def database: Database
   implicit val ec: ExecutionContext
 
-  import database.driver.api._
+  import slick.driver.PostgresDriver.api._
 
   // Default user returned when no credentials are provided
   lazy val anonymousUser:Future[Option[UsersRow]] = UserService.getUserByEmail("info+raster.foundry@azavea.com")
