@@ -10,38 +10,66 @@ export default (app) => {
          * @param {object} $http injected angular $http service
          * @param {object} $q promise service
          * @param {object} colorCorrectService color correction service
-         * @param {object} scene response from the API
+         * @param {object} projectService project service
+         * @param {object} scene response from the API, optional
          * @param {object} projectId project that layer is in
+         * @param {boolean} projectMosaic flag to enable requesting layers from mosaic tile server
          * @param {boolean} gammaCorrect flag to enable gamma correction
          * @param {boolean} sigmoidCorrect flag to enable sigmoidal correction
          * @param {boolean} colorClipCorrect flag to enable color clipping
          * @param {object} bands keys = band type, values = band number
          */
         constructor( // eslint-disable-line max-params
-            $http, $q, colorCorrectService, scene, projectId, gammaCorrect = true,
-            sigmoidCorrect = true, colorClipCorrect = true, bands = {red: 3, green: 2, blue: 1}
+            $http, $q, colorCorrectService, projectService, scene, projectId,
+            projectMosaic = true, gammaCorrect = true, sigmoidCorrect = true,
+            colorClipCorrect = true, bands = {red: 3, green: 2, blue: 1}
         ) {
             this.$http = $http;
             this.$q = $q;
             this.scene = scene;
+            this.projectMosaic = projectMosaic;
             this.gammaCorrect = gammaCorrect;
             this.sigmoidCorrect = sigmoidCorrect;
             this.colorClipCorrect = colorClipCorrect;
             this.colorCorrectService = colorCorrectService;
+            this.projectService = projectService;
             this.bands = bands;
             this.projectId = projectId;
             this._tiles = null; // eslint-disable-line no-underscore-dangle
             this._correction = null; // eslint-disable-line no-underscore-dangle
-            this.bounds = L.latLngBounds(
-                L.latLng(
-                    scene.sceneMetadata.lowerLeftCornerLatitude,
-                    scene.sceneMetadata.lowerLeftCornerLongitude
-                ),
-                L.latLng(
-                    scene.sceneMetadata.upperRightCornerLatitude,
-                    scene.sceneMetadata.upperRightCornerLongitude
-                )
-            );
+            this.getBounds();
+        }
+
+        /** Function to return bounds from either the project or the scene
+          *
+          * @return {object} Leaflet latLngBounds
+          */
+        getBounds() {
+            if (this.projectMosaic) {
+                this.projectService.getProjectCorners(this.projectId).then((data) => {
+                    this.bounds = L.latLngBounds(
+                        L.latLng(
+                            data.lowerLeftLat,
+                            data.lowerLeftLon
+                        ),
+                        L.latLng(
+                            data.upperRightLat,
+                            data.upperRightLon
+                        )
+                    );
+                });
+            } else {
+                this.bounds = L.latLngBounds(
+                    L.latLng(
+                        this.scene.sceneMetadata.lowerLeftCornerLatitude,
+                        this.scene.sceneMetadata.lowerLeftCornerLongitude
+                    ),
+                    L.latLng(
+                        this.scene.sceneMetadata.upperRightCornerLatitude,
+                        this.scene.sceneMetadata.upperRightCornerLongitude
+                    )
+                );
+            }
         }
 
         /** Function to return a promise that resolves into a leaflet tile layer
@@ -80,12 +108,16 @@ export default (app) => {
          * @returns {string} URL for this tile layer
          */
         getLayerURL() {
-            let organizationId = this.scene.organizationId;
-            // TODO: replace this once user IDs are URL safe ISSUE: 766
-            let userId = this.scene.createdBy.replace('|', '_');
+            let userParams = this.userParamsFromScene(this.scene);
+            let organizationId = userParams.organizationId;
+            let userId = userParams.userId;
             return this.formatColorParams().then((formattedParams) => {
+                if (!this.projectMosaic) {
+                    return `/tiles/${organizationId}/` +
+                        `${userId}/${this.scene.id}/rgb/{z}/{x}/{y}/?${formattedParams}`;
+                }
                 return `/tiles/${organizationId}/` +
-                    `${userId}/${this.scene.id}/rgb/{z}/{x}/{y}/?${formattedParams}`;
+                    `${userId}/project/${this.projectId}/{z}/{x}/{y}/?${formattedParams}`;
             });
         }
 
@@ -102,10 +134,9 @@ export default (app) => {
          * @returns {string} URL for the histogram
          */
         getHistogramURL() {
-            let organizationId = this.scene.organizationId;
-            // TODO: replace this once user IDs are URL safe ISSUE: 766
-
-            let userId = this.scene.createdBy.replace('|', '_');
+            let userParams = this.userParamsFromScene(this.scene);
+            let organizationId = userParams.organizationId;
+            let userId = userParams.userId;
             return this.formatColorParams().then((formattedParams) => {
                 return `/tiles/${organizationId}/` +
                     `${userId}/${this.scene.id}/rgb/histogram/?${formattedParams}`;
@@ -210,24 +241,44 @@ export default (app) => {
                 });
             });
         }
+
+        /**
+         * Helper function to get user params from scene or list of scenes
+         * @param {object|object[]}scene scene or list of scenes to extract user params from
+         * @returns {object} {userId: url-safe user id, organizationId: url-safe org id}
+         */
+        userParamsFromScene(scene) {
+            // if we have one scene, make it into an array and grab the first element.
+            // if we have several scenes, concat them all to the empty array and take the first
+            // not performant for "large" numbers of scenes
+            let tmp = [].concat(scene)[0];
+            return {
+                // TODO: replace this once user IDs are URL safe ISSUE: 766
+                userId: tmp.createdBy.replace('|', '_'),
+                organizationId: tmp.organizationId
+            };
+        }
     }
 
     class LayerService {
-        constructor($http, $q, colorCorrectService) {
+        constructor($http, $q, colorCorrectService, projectService) {
             'ngInject';
             this.$http = $http;
             this.$q = $q;
             this.colorCorrectService = colorCorrectService;
+            this.projectService = projectService;
         }
 
         /**
          * Constructor for layer via a service
          * @param {object} scene resource returned via API
          * @param {string} projectId id for project scene belongs to
+         * @param {boolean} projectMosaic flag to enable requesting layers from mosaic tile server
          * @returns {Layer} layer created
          */
-        layerFromScene(scene, projectId) {
-            return new Layer(this.$http, this.$q, this.colorCorrectService, scene, projectId);
+        layerFromScene(scene, projectId, projectMosaic = false) {
+            return new Layer(this.$http, this.$q, this.colorCorrectService, this.projectService,
+                             scene, projectId, projectMosaic);
         }
     }
 

@@ -123,6 +123,10 @@ export default class ProjectEditController {
         ).then(
             (allScenes) => {
                 this.sceneList = allScenes;
+                for (const scene of this.sceneList) {
+                    let scenelayer = this.layerService.layerFromScene(scene, this.projectId);
+                    this.sceneLayers.set(scene.id, scenelayer);
+                }
                 this.layersFromScenes();
             },
             (error) => {
@@ -134,20 +138,11 @@ export default class ProjectEditController {
     }
 
     layersFromScenes() {
-        // Create scene layers to use for color correction
-        for (const scene of this.sceneList) {
-            let sceneLayer = this.layerService.layerFromScene(scene, this.projectId);
-            this.sceneLayers.set(scene.id, sceneLayer);
-        }
-
-        this.layers = this.sceneLayers.values();
         this.getMap().then((map) => {
-            map.deleteLayers('scenes');
-            for (let layer of this.layers) {
-                layer.getTileLayer().then((tiles) => {
-                    map.addLayer('scenes', tiles);
-                });
-            }
+            let layer = this.layerService.layerFromScene(this.sceneList, this.projectId, true);
+            layer.getTileLayer().then((tiles) => {
+                map.addLayer('project', tiles);
+            });
         });
     }
 
