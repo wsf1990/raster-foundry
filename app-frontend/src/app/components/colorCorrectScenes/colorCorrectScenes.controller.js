@@ -2,7 +2,7 @@
 * From a lng coordinate and a zoom level, determine the x-coordinate of
 * the tile in falls within
 * @param {numeric} lng lng coordinate
-*
+* @param {numeric} zoom zoom level
 * @returns {numeric} x-coordinate of tile
 */
 let lng2Tile = function (lng, zoom) {
@@ -13,7 +13,7 @@ let lng2Tile = function (lng, zoom) {
 * From a lat coordinate and a zoom level, determine the y-coordinate of
 * the tile in falls within
 * @param {numeric} lat lat coordinate
-*
+* @param {numeric} zoom zoom level
 * @returns {numeric} y-coordinate of tile
 */
 let lat2Tile = function (lat, zoom) {
@@ -26,7 +26,7 @@ let lat2Tile = function (lat, zoom) {
 * From a tile coordinate and zoom level, determine the lng coordinate of
 * the corresponding tile's NE corner
 * @param {numeric} x x-coordinate of tile
-*
+* @param {zoom} zoom zoom level
 * @returns {numeric} lng point of tile NE corner
 */
 let tile2Lng = function (x, zoom) {
@@ -37,7 +37,7 @@ let tile2Lng = function (x, zoom) {
 * From a tile coordinate and zoom level, determine the lat coordinate of
 * the corresponding tile's NE corner
 * @param {numeric} y y-coordinate of tile
-*
+* @param {numeric} zoom zoom level
 * @returns {numeric} lat point of tile NE corner
 */
 let tile2Lat = function (y, zoom) {
