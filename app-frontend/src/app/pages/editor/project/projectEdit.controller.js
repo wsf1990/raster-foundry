@@ -24,6 +24,7 @@ export default class ProjectEditController {
         this.projectId = this.$state.params.projectid;
         this.selectedScenes = new Map();
         this.selectedLayers = new Map();
+        this.mosaicLayer = new Map();
         this.sceneList = [];
         this.sceneLayers = new Map();
         this.layers = [];
@@ -140,6 +141,7 @@ export default class ProjectEditController {
     layersFromScenes() {
         this.getMap().then((map) => {
             let layer = this.layerService.layerFromScene(this.sceneList, this.projectId, true);
+            this.mosaicLayer.set(this.projectId, layer);
             layer.getTileLayer().then((tiles) => {
                 map.addLayer('project', tiles);
             });

@@ -224,7 +224,7 @@ export default (app) => {
 
         updateColorCorrection(corrections) {
             this._correction = corrections; // eslint-disable-line no-underscore-dangle
-            this.colorCorrectService.updateOrCreate(
+            return this.colorCorrectService.updateOrCreate(
                 this.scene.id, this.projectId, corrections
             ).then(() => this.colorCorrect());
         }
@@ -235,7 +235,7 @@ export default (app) => {
          * @returns {null} null
          */
         colorCorrect() {
-            this.getTileLayer().then((tiles) => {
+            return this.getTileLayer().then((tiles) => {
                 this.getLayerURL().then((url) => {
                     return tiles.setUrl(url);
                 });

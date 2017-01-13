@@ -24,6 +24,7 @@ export default class ColorCorrectPaneController {
         this.firstLayer.getColorCorrection().then((correction) => {
             this.correction = correction;
         });
+        this.mosaic = this.mosaicLayer.values().next().value;
         this.fetchHistograms();
     }
 
@@ -50,9 +51,17 @@ export default class ColorCorrectPaneController {
      */
     onCorrectionChange(newCorrection) {
         if (newCorrection) {
+            let promises = [];
             for (let layer of this.selectedLayers.values()) {
-                layer.updateColorCorrection(newCorrection);
+                promises.push(layer.updateColorCorrection(newCorrection));
             }
+            this.$q.all(promises).then(() => {
+                this.mosaicLayer.getMosaicLayerURL().then((url) => {
+                    this.mosaicLayer.getMosaicTileLayer().then((tiles) => {
+                        tiles.setUrl(url);
+                    });
+                });
+            });
             this.fetchHistograms();
         }
     }
