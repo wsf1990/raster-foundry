@@ -50,95 +50,95 @@ export default class DiagramContainerController {
         this.nodes = new Map();
 
         let ndviBeforeInput = this.createRectangle({
-            label: 'NDVI - Before: Input',
+            label: 'Area of Interest (Before)',
             inputs: [],
             outputs: ['Output']
         });
 
         this.nodes.set(ndviBeforeInput, {
             input: 0,
-            name: 'NDVI - Before: Input',
+            name: 'Area of Interest (Before)',
             part: 'input'
         });
 
 
         let ndviBefore = this.createRectangle({
-            label: 'NDVI - Before',
+            label: 'Vegetation Index',
             inputs: ['Input'],
             outputs: ['Output']
         });
 
         this.nodes.set(ndviBefore, {
             input: 0,
-            name: 'NDVI - Before',
+            name: 'Vegetation Index',
             part: 'ndvi0'
         });
 
         this.createLink([ndviBeforeInput, 'Output'], [ndviBefore, 'Input']);
 
         let reclassifyBefore = this.createRectangle({
-            label: 'Reclassify - Before',
+            label: 'Detect Vegetation',
             inputs: ['Input'],
             outputs: ['Output']
         });
 
         this.nodes.set(reclassifyBefore, {
             input: 0,
-            name: 'Reclassify - Before',
+            name: 'Detect Vegetation',
             part: 'class0'
         });
 
         this.createLink([ndviBefore, 'Output'], [reclassifyBefore, 'Input']);
 
         let ndviAfterInput = this.createRectangle({
-            label: 'NDVI - After: Input',
+            label: 'Area of Interest Imagery',
             inputs: [],
             outputs: ['Output']
         });
 
         this.nodes.set(ndviAfterInput, {
             input: 1,
-            name: 'NDVI - After: Input',
+            name: 'Area of Interest Imagery',
             part: 'input'
         });
 
         let ndviAfter = this.createRectangle({
-            label: 'NDVI - After',
+            label: 'Vegetation Index',
             inputs: ['Input'],
             outputs: ['Output']
         });
 
         this.nodes.set(ndviAfter, {
             input: 1,
-            name: 'NDVI - After',
+            name: 'Vegetation Index',
             part: 'ndvi1'
         });
 
         this.createLink([ndviAfterInput, 'Output'], [ndviAfter, 'Input']);
 
         let reclassifyAfter = this.createRectangle({
-            label: 'Reclassify - After',
+            label: 'Detect Vegetation',
             inputs: ['Input'],
             outputs: ['Output']
         });
 
         this.nodes.set(reclassifyAfter, {
             input: 1,
-            name: 'Reclassify - After',
+            name: 'Detect Vegetation',
             part: 'class1'
         });
 
         this.createLink([ndviAfter, 'Output'], [reclassifyAfter, 'Input']);
 
         let subtract = this.createRectangle({
-            label: 'Subtract',
+            label: 'Find Vegetation Loss (subtract)',
             inputs: ['First', 'Second'],
             outputs: ['Output']
         });
 
         this.nodes.set(subtract, {
             input: 1,
-            name: 'Subtract',
+            name: 'Find Vegetation Loss (subtract)',
             part: 'final'
         });
 
