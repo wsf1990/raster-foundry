@@ -1,7 +1,7 @@
 package com.azavea.rf.ingest
 
 import com.azavea.rf.ingest.util._
-import com.azavea.rf.ingest.tool._
+import com.azavea.rf.ingest.model._
 
 import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.io._
@@ -62,7 +62,7 @@ object Ingest extends SparkJob {
   def calculateTileLayerMetadata(layer: IngestLayer, scheme: LayoutScheme): (Int, TileLayerMetadata[SpatialKey]) = {
     // We need to build TileLayerMetadata that we expect to start pyramid from
     val overallExtent = layer.sources
-      .map({ src => src.extent.reproject(src.getCRSExtent, layer.output.crs) })
+      .map({ src => src.extent.reproject(src.extentCrs, layer.output.crs) })
       .reduce(_ combine _)
 
     // Infer the base level of the TMS pyramid based on overall extent and cellSize
@@ -185,6 +185,7 @@ object Ingest extends SparkJob {
         } catch {
           case e: Throwable =>
             attributeStore.write(sharedId, "ingestComplete", false)
+            throw e
         }
       }
     } else { // If not pyramiding. TODO: figure out exactly what we want to store here
@@ -195,6 +196,7 @@ object Ingest extends SparkJob {
       } catch {
         case e: Throwable =>
           attributeStore.write(sharedId, "ingestComplete", false)
+          throw e
       }
     }
 
@@ -218,7 +220,7 @@ object Ingest extends SparkJob {
 
     try {
       ingestDefinition.layers.foreach(ingestLayer(params.overwrite))
-      if (params.testRun) ingestDefinition.layers.foreach(Testing.validateCatalogEntry)
+      if (params.testRun) ingestDefinition.layers.foreach(Validation.validateCatalogEntry)
     } finally {
       sc.stop
     }
