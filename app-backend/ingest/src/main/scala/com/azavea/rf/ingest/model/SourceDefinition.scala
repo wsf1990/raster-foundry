@@ -6,7 +6,7 @@ import DefaultJsonProtocol._
 
 import geotrellis.raster._
 import geotrellis.vector._
-import geotrellis.proj4.CRS
+import geotrellis.proj4.{ CRS, LatLng }
 
 import com.azavea.rf.ingest.util.getTiffTags
 
@@ -31,17 +31,12 @@ object SourceDefinition {
 
   def apply(overrides: SourceDefinition.Overrides): SourceDefinition = {
     lazy val tt = getTiffTags(overrides.uri)
-    lazy val extent = overrides.extent.getOrElse(tt.extent)
-    lazy val crs = overrides.crs.getOrElse(tt.crs)
-    lazy val extentCrs = overrides.extentCrs.getOrElse(crs)
-    lazy val cellSize = overrides.cellSize.getOrElse(tt.cellSize)
-
     SourceDefinition(
       overrides.uri,
-      extent,
-      crs,
-      extentCrs,
-      cellSize,
+      overrides.extent.getOrElse(tt.extent),
+      overrides.crs.getOrElse(tt.crs),
+      overrides.extentCrs.getOrElse(LatLng),
+      overrides.cellSize.getOrElse(tt.cellSize),
       overrides.bandMaps
     )
   }
