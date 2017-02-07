@@ -18,15 +18,18 @@ import geotrellis.raster.io.geotiff.MultibandGeoTiff
 import geotrellis.spark.tiling._
 import geotrellis.proj4._
 
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.rdd._
 import org.apache.spark._
 import spray.json._
 import DefaultJsonProtocol._
+
 import java.net.URI
+import scala.collection.JavaConverters._
 
 case class BandTile(band: Int, tile: Tile)
 
-object Ingest extends SparkJob {
+object Ingest extends SparkJob with LazyLogging {
 
   case class Params(
     jobDefinition: URI = new URI(""),
@@ -52,6 +55,18 @@ object Ingest extends SparkJob {
       val writer = fileWriter.writer[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](outputDef.keyIndexMethod)
       val deleter = FileLayerDeleter(outputDef.uri.getPath)
       (writer, deleter, fileWriter.attributeStore)
+  }
+
+  def failsafeDelete(deleter: RfLayerDeleter, attStore: AttributeStore)(layerId: LayerId): Unit = {
+    try {
+//      attStore.delete(layerId)
+      deleter.delete(layerId)
+    } catch {
+      case e: LayerNotFoundError =>
+        logger.debug(s"Overwritten layer $layerId not found. Proceeding...")
+      case e: com.amazonaws.services.s3.model.AmazonS3Exception =>
+        logger.debug(s"Unable to delete layer ${layerId}; check ingest configuration")
+    }
   }
 
   /** Produce metadata for an IngestLayer
@@ -151,24 +166,19 @@ object Ingest extends SparkJob {
 
     val layerRdd = ContextRDD(multibandTiledRdd, tileLayerMetadata)
     val (writer, deleter, attributeStore) = getRfLayerManagement(layer.output)
+
     val sharedId = LayerId(layer.id.toString, 0)
+    val failsafeDeleteLayer = failsafeDelete(deleter, attributeStore)(_)
 
-    if (overwriteLayer) {
-      try {
-        deleter.delete(sharedId)
-        attributeStore.delete(sharedId)
-      } catch {
-        case e: Throwable => throw e
-      }
-    }
-
+    if (overwriteLayer && attributeStore.layerExists(sharedId)) { failsafeDeleteLayer(sharedId) }
     if (layer.output.pyramid) { // If pyramiding
       Pyramid.upLevels(layerRdd, layoutScheme, maxZoom, 1, resampleMethod) { (rdd, zoom) =>
+        logger.info(s"Writing zoom level $zoom in ${layer.id.toString}")
         // attributes that apply to all layers are placed at zoom 0
         val layerId = LayerId(layer.id.toString, zoom)
+        if (overwriteLayer && attributeStore.layerExists(layerId)) { failsafeDeleteLayer(layerId) }
 
         try {
-          if (overwriteLayer) { deleter.delete(layerId) }
           writer.write(layerId, rdd)
 
           if (zoom == math.max(maxZoom / 2, 1)) {
@@ -190,7 +200,7 @@ object Ingest extends SparkJob {
       }
     } else { // If not pyramiding. TODO: figure out exactly what we want to store here
       try {
-        if (overwriteLayer) { deleter.delete(sharedId) }
+        logger.info(s"Writing (no pyramid) layer ${layer.id.toString}")
         writer.write(sharedId, layerRdd)
         attributeStore.write(sharedId, "ingestComplete", true)
       } catch {
