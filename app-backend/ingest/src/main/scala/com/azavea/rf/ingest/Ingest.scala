@@ -39,7 +39,7 @@ object Ingest extends SparkJob with LazyLogging {
   type RfLayerWriter = Writer[LayerId, RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]]]
   type RfLayerDeleter = LayerDeleter[LayerId]
 
-  /** Get a layerwriter and an attribute store for the catalog located at the provided URI
+  /** Get a LayerWriter and an attribute store for the catalog located at the provided URI
     *
     * @param outputDef The ingest job's output definition
     */
@@ -57,7 +57,7 @@ object Ingest extends SparkJob with LazyLogging {
       (writer, deleter, fileWriter.attributeStore)
   }
 
-  def failsafeDelete(deleter: RfLayerDeleter, attStore: AttributeStore)(layerId: LayerId): Unit = {
+  def deleteLayer(deleter: RfLayerDeleter, attStore: AttributeStore)(layerId: LayerId): Unit = {
     try {
 //      attStore.delete(layerId)
       deleter.delete(layerId)
@@ -117,7 +117,7 @@ object Ingest extends SparkJob with LazyLogging {
       hs1.zip(hs2).map { case (a, b) => a merge b }
     })
 
-  /** We need to supress this warning because there's a perfectly safe `head` call being
+  /** We need to suppress this warning because there's a perfectly safe `head` call being
     *  made here. The compiler just isn't smart enough to figure that out
     *
     *  @param layer An ingest layer specification
@@ -168,7 +168,7 @@ object Ingest extends SparkJob with LazyLogging {
     val (writer, deleter, attributeStore) = getRfLayerManagement(layer.output)
 
     val sharedId = LayerId(layer.id.toString, 0)
-    val failsafeDeleteLayer = failsafeDelete(deleter, attributeStore)(_)
+    val failsafeDeleteLayer = deleteLayer(deleter, attributeStore)(_)
 
     if (overwriteLayer && attributeStore.layerExists(sharedId)) { failsafeDeleteLayer(sharedId) }
     if (layer.output.pyramid) { // If pyramiding

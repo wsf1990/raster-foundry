@@ -1,14 +1,14 @@
 package com.azavea.rf.ingest.model
 
 import java.net.URI
+
 import spray.json._
 import DefaultJsonProtocol._
-
 import geotrellis.raster._
 import geotrellis.vector._
-import geotrellis.proj4.{ CRS, LatLng }
-
+import geotrellis.proj4.{CRS, LatLng}
 import com.azavea.rf.ingest.util.getTiffTags
+import com.typesafe.scalalogging.LazyLogging
 
 /** This class provides all information required to read from a source
   *
@@ -26,20 +26,8 @@ case class SourceDefinition(
   bandMaps: Array[BandMapping]
 )
 
-object SourceDefinition {
+object SourceDefinition extends LazyLogging {
   implicit val jsonFormat = jsonFormat6(SourceDefinition.apply _)
-
-  def apply(overrides: SourceDefinition.Overrides): SourceDefinition = {
-    lazy val tt = getTiffTags(overrides.uri)
-    SourceDefinition(
-      overrides.uri,
-      overrides.extent.getOrElse(tt.extent),
-      overrides.crs.getOrElse(tt.crs),
-      overrides.extentCrs.getOrElse(LatLng),
-      overrides.cellSize.getOrElse(tt.cellSize),
-      overrides.bandMaps
-    )
-  }
 
   /** This object handles deserialization of source definitions and overrides any values which
     *  might be found in the tiff's header.
@@ -51,7 +39,31 @@ object SourceDefinition {
     crs: Option[CRS],
     cellSize: Option[CellSize],
     bandMaps: Array[BandMapping]
-  )
+  ) {
+    def toSourceDefinition: SourceDefinition = {
+      if (extent.isDefined && crs.isDefined && cellSize.isDefined) {
+        SourceDefinition(
+          uri,
+          extent.get,
+          crs.get,
+          extentCrs.getOrElse(LatLng),
+          cellSize.get,
+          bandMaps
+        )
+      } else {
+        logger.debug(s"Reading tiff tags: $uri")
+        lazy val tt = getTiffTags(uri)
+        SourceDefinition(
+          uri,
+          extent.getOrElse(tt.extent),
+          crs.getOrElse(tt.crs),
+          extentCrs.getOrElse(tt.crs),
+          cellSize.getOrElse(tt.cellSize),
+          bandMaps
+        )
+      }
+    }
+  }
 
   object Overrides {
     implicit val jsonFormat = jsonFormat6(Overrides.apply _)

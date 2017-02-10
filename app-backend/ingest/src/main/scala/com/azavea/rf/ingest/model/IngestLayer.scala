@@ -14,21 +14,22 @@ import java.util.UUID
 case class IngestLayer(
   id: UUID,
   output: OutputDefinition,
-  sourceOverrides: Array[SourceDefinition.Overrides]
-) {
-  lazy val sources: Array[SourceDefinition] = sourceOverrides.map(SourceDefinition(_))
-}
+  sources: Array[SourceDefinition]
+)
 
 object IngestLayer {
   implicit object ingestLayerJsonFormat extends RootJsonFormat[IngestLayer] {
       def write(obj: IngestLayer) = JsObject(
         "id" -> obj.id.toJson,
         "output" -> obj.output.toJson,
-        "sourceOverrides" -> obj.sourceOverrides.toJson
+        "sources" -> obj.sources.toJson
       )
-      def read(json: JsValue) = json.asJsObject.getFields("id", "output", "sourceOverrides") match {
+      def read(json: JsValue) = json.asJsObject.getFields("id", "output", "sources") match {
         case Seq(i, o, s) =>
-          IngestLayer(i.convertTo[UUID], o.convertTo[OutputDefinition], s.convertTo[Array[SourceDefinition.Overrides]])
+          IngestLayer(
+            id = i.convertTo[UUID],
+            output = o.convertTo[OutputDefinition],
+            sources = s.convertTo[Array[SourceDefinition.Overrides]].map(_.toSourceDefinition))
         case _ =>
           deserializationError("Failed to parse IngestLayer")
       }

@@ -13,7 +13,7 @@
             "pyramid": true,
             "native": true
         },
-        "sourceOverrides": [{
+        "sources": [{
             "uri": "file:///opt/rf/test-resources/imagery/landsat-clipped-B4.tif",
             "extent": [138.8339238,  34.9569460, 141.4502449,  37.1094577],
             "extentCrs": "epsg:32654",
