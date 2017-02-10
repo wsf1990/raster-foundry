@@ -65,7 +65,7 @@ object Ingest extends SparkJob with LazyLogging {
       case e: LayerNotFoundError =>
         logger.debug(s"Overwritten layer $layerId not found. Proceeding...")
       case e: com.amazonaws.services.s3.model.AmazonS3Exception =>
-        logger.debug(s"Unable to delete layer ${layerId}; check ingest configuration")
+        logger.error(s"Unable to delete layer ${layerId}; check ingest configuration")
     }
   }
 

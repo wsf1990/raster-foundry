@@ -39,7 +39,7 @@ object Validation extends LazyLogging {
   def validateFileCatalogEntry(catalogURI: URI, layerID: UUID): Unit = {
     val attributeStore = FileAttributeStore(catalogURI.getPath)
     val gtLayerID = LayerId(layerID.toString, 0)
-    println(attributeStore.read[Boolean](gtLayerID, "ingestComplete"))
+
     if (! attributeStore.read[Boolean](gtLayerID, "ingestComplete"))
       throw new Exception("Something went wrong during ingest...")
     else logger.info("Ingest completed successfully")
