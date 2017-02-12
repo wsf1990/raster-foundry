@@ -230,6 +230,66 @@ class IngestDefinitionSpec extends FunSpec with Matchers {
       |}
       |""".stripMargin
 
+  val awsJsonNoOverrides =
+    """
+      |{
+      |  "id": "dda6080f-f7ad-455d-b409-764dd8c57039",
+      |  "layers": [
+      |    {
+      |      "id": "8436f7e9-b7f7-4d4f-bda8-76b32c356dff",
+      |      "output": {
+      |        "uri": "s3://geotrellis-test/rf-eac-test",
+      |        "crs": "epsg:3857",
+      |        "cellType": "uint16raw",
+      |        "histogramBuckets": 512,
+      |        "tileSize": 256,
+      |        "resampleMethod": "NearestNeighbor",
+      |        "keyIndexMethod": "ZCurveKeyIndexMethod",
+      |        "pyramid": true,
+      |        "native": true
+      |      },
+      |      "sources": [
+      |        {
+      |          "uri": "http://landsat-pds.s3.amazonaws.com/L8/107/035/LC81070352015218LGN00/LC81070352015218LGN00_B4.TIF",
+      |          "bandMaps": [
+      |            {
+      |              "source": 1,
+      |              "target": 1
+      |            }
+      |          ]
+      |        },
+      |        {
+      |          "uri": "http://landsat-pds.s3.amazonaws.com/L8/107/035/LC81070352015218LGN00/LC81070352015218LGN00_B3.TIF",
+      |          "bandMaps": [
+      |            {
+      |              "source": 1,
+      |              "target": 2
+      |            }
+      |          ]
+      |        },
+      |        {
+      |          "uri": "http://landsat-pds.s3.amazonaws.com/L8/107/035/LC81070352015218LGN00/LC81070352015218LGN00_B2.TIF",
+      |          "bandMaps": [
+      |            {
+      |              "source": 1,
+      |              "target": 3
+      |            }
+      |          ]
+      |        },
+      |        {
+      |          "uri": "http://landsat-pds.s3.amazonaws.com/L8/107/035/LC81070352015218LGN00/LC81070352015218LGN00_B5.TIF",
+      |          "bandMaps": [
+      |            {
+      |              "source": 1,
+      |              "target": 4
+      |            }
+      |          ]
+      |        }
+      |      ]
+      |    }
+      |  ]
+      |}
+    """.stripMargin
   it("parses the sample, local definition") {
     noException should be thrownBy {
       localJson
@@ -241,6 +301,14 @@ class IngestDefinitionSpec extends FunSpec with Matchers {
   it("parses the sample, aws definition") {
     noException should be thrownBy {
       awsJson
+        .parseJson
+        .convertTo[IngestDefinition]
+    }
+  }
+
+  it("parses the sample, aws definition with no overrides") {
+    noException should be thrownBy {
+      awsJsonNoOverrides
         .parseJson
         .convertTo[IngestDefinition]
     }
