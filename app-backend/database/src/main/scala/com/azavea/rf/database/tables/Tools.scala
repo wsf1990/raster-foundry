@@ -36,8 +36,8 @@ class Tools(_tableTag: Tag) extends Table[Tool](_tableTag, "tools")
   val id: Rep[UUID] = column[UUID]("id", O.PrimaryKey)
   val createdAt: Rep[Timestamp] = column[Timestamp]("created_at")
   val modifiedAt: Rep[Timestamp] = column[Timestamp]("modified_at")
-  val createdBy: Rep[String] = column[String]("created_by", O.Length(255, varying = true))
-  val modifiedBy: Rep[String] = column[String]("modified_by", O.Length(255, varying = true))
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
   val organizationId: Rep[UUID] = column[UUID]("organization_id")
   val title: Rep[String] = column[String]("title", O.Length(255, varying = true))
   val description: Rep[String] = column[String]("description")
@@ -177,9 +177,9 @@ object Tools extends TableQuery(tag => new Tools(tag)) with LazyLogging {
   /** Insert a tool given a create case class with a user. Includes tool tag/category ids.
     *
     * @param tooltoCreate Tool.Create object to use to create full tool
-    * @param userId String user/owner to create a new tool with
+    * @param userId UUID user/owner to create a new tool with
     */
-  def insertTool(tooltoCreate: Tool.Create, userId: String)(
+  def insertTool(tooltoCreate: Tool.Create, userId: UUID)(
                   implicit database: DB): Future[Tool.WithRelated] = {
 
     val (tool, toolTagToTools, toolCategoryToTools) = tooltoCreate

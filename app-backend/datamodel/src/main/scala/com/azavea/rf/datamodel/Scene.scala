@@ -53,9 +53,9 @@ object SceneStatusFields {
 case class Scene(
   id: UUID,
   createdAt: java.sql.Timestamp,
-  createdBy: String,
+  createdBy: UUID,
   modifiedAt: java.sql.Timestamp,
-  modifiedBy: String,
+  modifiedBy: UUID,
   organizationId: UUID,
   ingestSizeBytes: Int,
   visibility: Visibility,
@@ -125,7 +125,7 @@ object Scene extends GeoJsonSupport {
     filterFields: SceneFilterFields = new SceneFilterFields(),
     statusFields: SceneStatusFields
   ) {
-    def toScene(userId: String): Scene = {
+    def toScene(userId: UUID): Scene = {
       val now = new Timestamp((new java.util.Date()).getTime())
       Scene(
         id.getOrElse(UUID.randomUUID),
@@ -157,9 +157,9 @@ object Scene extends GeoJsonSupport {
   case class WithRelated(
     id: UUID,
     createdAt: Timestamp,
-    createdBy: String,
+    createdBy: UUID,
     modifiedAt: Timestamp,
-    modifiedBy: String,
+    modifiedBy: UUID,
     organizationId: UUID,
     ingestSizeBytes: Int,
     visibility: Visibility,

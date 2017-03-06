@@ -8,9 +8,9 @@ import java.sql.Timestamp
 case class Datasource(
   id: UUID,
   createdAt: java.sql.Timestamp,
-  createdBy: String,
+  createdBy: UUID,
   modifiedAt: java.sql.Timestamp,
-  modifiedBy: String,
+  modifiedBy: UUID,
   organizationId: UUID,
   name: String,
   visibility: Visibility,
@@ -36,8 +36,8 @@ object Datasource {
     composites: Map[String, Any],
     extras: Map[String, Any]
   ) {
-    def toDatasource(userId: String): Datasource = {
-      val id = java.util.UUID.randomUUID()
+    def toDatasource(userId: UUID): Datasource = {
+      val id = UUID.randomUUID()
       val now = new Timestamp((new java.util.Date()).getTime())
       Datasource(
         id,

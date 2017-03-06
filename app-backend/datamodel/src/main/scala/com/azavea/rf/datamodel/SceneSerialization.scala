@@ -63,9 +63,9 @@ object ScenesJsonProtocol extends DefaultJsonProtocol
       Scene.WithRelated(
         UUID.fromString(StringJsonFormat.read(fields(0))), // id
         formatTs(StringJsonFormat.read(fields(1))), // createdAt
-        StringJsonFormat.read(fields(2)), // createdBy
+        UUID.fromString(StringJsonFormat.read(fields(2))), // createdBy
         formatTs(StringJsonFormat.read(fields(3))), // modifiedAt
-        StringJsonFormat.read(fields(4)), // modifiedBy
+        UUID.fromString(StringJsonFormat.read(fields(4))), // modifiedBy
         UUID.fromString(StringJsonFormat.read(fields(5))), // organizationId
         IntJsonFormat.read(fields(6)), // ingestSizeBytes
         Visibility.fromString(StringJsonFormat.read(fields(7))), // visibility

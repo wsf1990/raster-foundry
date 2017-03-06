@@ -157,8 +157,8 @@ case class OrgQueryParameters(
 
 /** Query parameters to filter by users */
 case class UserQueryParameters(
-  createdBy: Option[String] = None,
-  modifiedBy: Option[String] = None
+  createdBy: Option[UUID] = None,
+  modifiedBy: Option[UUID] = None
 )
 
 /** Query parameters to filter by modified/created times */
@@ -174,7 +174,7 @@ case class ToolCategoryQueryParameters(
 )
 
 case class ToolRunQueryParameters(
-  createdBy: Option[String] = None,
+  createdBy: Option[UUID] = None,
   projectId: Option[UUID] = None,
   toolId: Option[UUID] = None
 )

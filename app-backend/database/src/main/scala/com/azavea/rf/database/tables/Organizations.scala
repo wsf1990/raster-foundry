@@ -136,7 +136,7 @@ object Organizations extends TableQuery(tag => new Organizations(tag)) with Lazy
     }
   }
 
-  def getOrganizationUser(orgId: UUID, userId: String)(implicit database: DB): Future[Option[User.WithRole]] = {
+  def getOrganizationUser(orgId: UUID, userId: UUID)(implicit database: DB): Future[Option[User.WithRole]] = {
     val getOrgUserQuery = for {
       relationship <- UsersToOrganizations.filter(_.userId === userId)
         .filter(_.organizationId === orgId)
@@ -169,7 +169,7 @@ object Organizations extends TableQuery(tag => new Organizations(tag)) with Lazy
     }
   }
 
-  def getUserOrgRole(userId: String, orgId: UUID)
+  def getUserOrgRole(userId: UUID, orgId: UUID)
                     (implicit database: DB): Future[Option[User.WithRole]] = {
     val action = UsersToOrganizations.filter(
       rel => rel.userId === userId && rel.organizationId === orgId
@@ -183,7 +183,7 @@ object Organizations extends TableQuery(tag => new Organizations(tag)) with Lazy
     }
   }
 
-  def deleteUserOrgRole(userId: String, orgId: UUID)(implicit database: DB): Future[Int] = {
+  def deleteUserOrgRole(userId: UUID, orgId: UUID)(implicit database: DB): Future[Int] = {
     val action = UsersToOrganizations.filter(
       rel => rel.userId === userId && rel.organizationId === orgId
     ).delete
@@ -193,7 +193,8 @@ object Organizations extends TableQuery(tag => new Organizations(tag)) with Lazy
     }
   }
 
-  def updateUserOrgRole(userWithRole: User.WithRole, orgId: UUID, userId: String)(implicit database: DB): Future[Int] = {
+  def updateUserOrgRole(userWithRole: User.WithRole, orgId: UUID, userId: UUID)
+                       (implicit database: DB): Future[Int] = {
     val now = new Timestamp((new java.util.Date).getTime)
 
     val rowUpdate = for {

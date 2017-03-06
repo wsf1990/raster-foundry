@@ -8,9 +8,9 @@ import java.sql.Timestamp
 case class ToolRun(
   id: UUID,
   createdAt: Timestamp,
-  createdBy: String,
+  createdBy: UUID,
   modifiedAt: Timestamp,
-  modifiedBy: String,
+  modifiedBy: UUID,
   visibility: Visibility,
   organizationId: UUID,
   project: UUID,
@@ -31,7 +31,7 @@ object ToolRun {
     tool: UUID,
     execution_parameters: Map[String, Any]
   ) {
-    def toToolRun(userId: String): ToolRun = {
+    def toToolRun(userId: UUID): ToolRun = {
       val now = new Timestamp((new java.util.Date).getTime)
       ToolRun(
         UUID.randomUUID,

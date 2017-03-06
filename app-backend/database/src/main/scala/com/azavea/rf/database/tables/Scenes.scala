@@ -31,9 +31,9 @@ class Scenes(_tableTag: Tag) extends Table[Scene](_tableTag, "scenes")
 {
   val id: Rep[java.util.UUID] = column[java.util.UUID]("id", O.PrimaryKey)
   val createdAt: Rep[java.sql.Timestamp] = column[java.sql.Timestamp]("created_at")
-  val createdBy: Rep[String] = column[String]("created_by", O.Length(255,varying=true))
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
   val modifiedAt: Rep[java.sql.Timestamp] = column[java.sql.Timestamp]("modified_at")
-  val modifiedBy: Rep[String] = column[String]("modified_by", O.Length(255,varying=true))
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
   val organizationId: Rep[java.util.UUID] = column[java.util.UUID]("organization_id")
   val ingestSizeBytes: Rep[Int] = column[Int]("ingest_size_bytes")
   val visibility: Rep[Visibility] = column[Visibility]("visibility")
@@ -65,9 +65,9 @@ class Scenes(_tableTag: Tag) extends Table[Scene](_tableTag, "scenes")
   type SceneTupleType = (
     UUID,
     java.sql.Timestamp,
-    String,
+    UUID,
     java.sql.Timestamp,
-    String,
+    UUID,
     UUID,
     Int,
     Visibility,

@@ -17,8 +17,8 @@ case class ToolCategory(
     slugLabel: String,
     createdAt: Timestamp,
     modifiedAt: Timestamp,
-    createdBy: String,
-    modifiedBy: String,
+    createdBy: UUID,
+    modifiedBy: UUID,
     category: String
 )
 
@@ -34,7 +34,7 @@ object ToolCategory {
       category: String
   ) {
 
-    def toToolCategory(userId: String): ToolCategory = {
+    def toToolCategory(userId: UUID): ToolCategory = {
       def toSlugLabel(category: String): String = {
         def decompose(s: String): String = java.text.Normalizer.normalize(
           s, java.text.Normalizer.Form.NFD

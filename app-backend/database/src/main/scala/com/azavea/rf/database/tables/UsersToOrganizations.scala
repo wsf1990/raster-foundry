@@ -5,6 +5,8 @@ import com.azavea.rf.database.fields.{UserToOrganizationFields, OrganizationFkFi
 import com.azavea.rf.database.sort._
 import com.azavea.rf.datamodel._
 
+import java.util.UUID
+
 class UsersToOrganizations(_tableTag: Tag) extends Table[User.ToOrganization](_tableTag, "users_to_organizations")
                                                    with UserToOrganizationFields
                                                    with TimestampFields
@@ -12,7 +14,7 @@ class UsersToOrganizations(_tableTag: Tag) extends Table[User.ToOrganization](_t
 {
   def * = (userId, organizationId, role, createdAt, modifiedAt) <> (User.ToOrganization.tupled, User.ToOrganization.unapply)
 
-  val userId: Rep[String] = column[String]("user_id", O.Length(255,varying=true))
+  val userId: Rep[UUID] = column[UUID]("user_id")
   val organizationId: Rep[java.util.UUID] = column[java.util.UUID]("organization_id")
   val role: Rep[User.Role] = column[User.Role]("role", O.Length(255,varying=true))
   val createdAt: Rep[java.sql.Timestamp] = column[java.sql.Timestamp]("created_at")

@@ -10,8 +10,8 @@ case class Image(
   createdAt: Timestamp,
   modifiedAt: Timestamp,
   organizationId: UUID,
-  createdBy: String,
-  modifiedBy: String,
+  createdBy: UUID,
+  modifiedBy: UUID,
   rawDataBytes: Int,
   visibility: Visibility,
   filename: String,
@@ -59,7 +59,7 @@ object Image {
     resolutionMeters: Float,
     metadataFiles: List[String]
   ) {
-    def toImage(userId: String): Image = {
+    def toImage(userId: UUID): Image = {
       val now = new Timestamp((new java.util.Date).getTime)
 
       Image(
@@ -67,8 +67,8 @@ object Image {
         now, // createdAt
         now, // modifiedAt
         organizationId,
-        userId, // createdBy: String,
-        userId, // modifiedBy: String,
+        userId, // createdBy: UUID,
+        userId, // modifiedBy: UUID,
         rawDataBytes,
         visibility,
         filename,
@@ -98,7 +98,7 @@ object Image {
     metadataFiles: List[String],
     bands: Seq[Band.Create]
   ) {
-    def toImage(userId: String): Image = {
+    def toImage(userId: UUID): Image = {
       Image.Create(
         organizationId,
         rawDataBytes,
@@ -122,8 +122,8 @@ object Image {
     createdAt: Timestamp,
     modifiedAt: Timestamp,
     organizationId: UUID,
-    createdBy: String,
-    modifiedBy: String,
+    createdBy: UUID,
+    modifiedBy: UUID,
     rawDataBytes: Int,
     visibility: Visibility,
     filename: String,

@@ -69,7 +69,7 @@ object Thumbnail {
     sceneId: UUID,
     url: String
   ) {
-    def toThumbnail(userId: String): Thumbnail = {
+    def toThumbnail(userId: UUID): Thumbnail = {
       val now = new Timestamp((new java.util.Date()).getTime())
       Thumbnail(
         this.id.getOrElse(UUID.randomUUID), // primary key

@@ -1,6 +1,7 @@
 package com.azavea.rf.database.tables
 
 import java.sql.Timestamp
+import java.util.UUID
 
 import com.azavea.rf.database.query._
 import com.azavea.rf.database.ExtendedPostgresDriver.api._
@@ -35,9 +36,9 @@ class ToolCategories(_tableTag: Tag)
 
   val slugLabel: Rep[String] = column[String]("slug_label", O.PrimaryKey)
   val createdAt: Rep[Timestamp] = column[Timestamp]("created_at")
-  val createdBy: Rep[String] = column[String]("created_by", O.Length(255, varying = true))
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
   val modifiedAt: Rep[Timestamp] = column[Timestamp]("modified_at")
-  val modifiedBy: Rep[String] = column[String]("modified_by", O.Length(255, varying = true))
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
   val category: Rep[String] = column[String]("category")
 
   lazy val createdByUserFK = foreignKey("tool_categories_created_by_fkey", createdBy, Users)(
@@ -120,7 +121,7 @@ object ToolCategories extends TableQuery(tag => new ToolCategories(tag)) with La
     * @param toolCategoryToCreate ToolCategory.Create object to use to create full tool category
     * @param userId           String user/owner to create a new tool category with
     */
-  def insertToolCategory(toolCategoryToCreate: ToolCategory.Create, userId: String)(
+  def insertToolCategory(toolCategoryToCreate: ToolCategory.Create, userId: UUID)(
     implicit database: DB): Future[ToolCategory] = {
     val toolCategory = toolCategoryToCreate.toToolCategory(userId)
     val insertAction = ToolCategories.forceInsert(toolCategory)

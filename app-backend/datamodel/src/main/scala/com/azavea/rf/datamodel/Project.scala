@@ -14,8 +14,8 @@ case class Project(
   createdAt: Timestamp,
   modifiedAt: Timestamp,
   organizationId: UUID,
-  createdBy: String,
-  modifiedBy: String,
+  createdBy: UUID,
+  modifiedBy: UUID,
   name: String,
   slugLabel: String,
   description: String,
@@ -51,7 +51,7 @@ object Project extends GeoJsonSupport {
     visibility: Visibility,
     tags: List[String]
   ) {
-    def toProject(userId: String): Project = {
+    def toProject(userId: UUID): Project = {
       val now = new Timestamp((new java.util.Date()).getTime())
       Project(
         UUID.randomUUID, // primary key

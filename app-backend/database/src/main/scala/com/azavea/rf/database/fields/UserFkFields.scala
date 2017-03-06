@@ -5,10 +5,11 @@ import com.azavea.rf.database.query.UserQueryParameters
 import com.azavea.rf.database.tables.Users
 import com.azavea.rf.datamodel.{User, Visibility}
 import slick.lifted.ForeignKeyQuery
+import java.util.UUID
 
 trait UserFkFields { self: Table[_] =>
-  def createdBy: Rep[String]
-  def modifiedBy: Rep[String]
+  def createdBy: Rep[UUID]
+  def modifiedBy: Rep[UUID]
 
   def createdByUserFK: ForeignKeyQuery[Users, User]
   def modifiedByUserFK: ForeignKeyQuery[Users, User]

@@ -9,8 +9,8 @@ case class Tool(
   id: UUID,
   createdAt: Timestamp,
   modifiedAt: Timestamp,
-  createdBy: String,
-  modifiedBy: String,
+  createdBy: UUID,
+  modifiedBy: UUID,
   organizationId: UUID,
   title: String,
   description: String,
@@ -64,7 +64,7 @@ object Tool {
     tags: Seq[UUID],
     categories: Seq[String]
   ) {
-    def toToolWithRelatedTuple(userId: String): (Tool, Seq[ToolTagToTool], Seq[ToolCategoryToTool]) = {
+    def toToolWithRelatedTuple(userId: UUID): (Tool, Seq[ToolTagToTool], Seq[ToolCategoryToTool]) = {
       val now = new Timestamp((new java.util.Date()).getTime())
       val toolId = UUID.randomUUID
       val tool = Tool(
@@ -108,8 +108,8 @@ object Tool {
     id: UUID,
     createdAt: Timestamp,
     modifiedAt: Timestamp,
-    createdBy: String,
-    modifiedBy: String,
+    createdBy: UUID,
+    modifiedBy: UUID,
     organizationId: UUID,
     title: String,
     description: String,

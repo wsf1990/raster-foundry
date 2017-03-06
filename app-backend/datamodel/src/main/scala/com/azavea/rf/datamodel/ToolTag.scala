@@ -19,8 +19,8 @@ case class ToolTag(
     createdAt: Timestamp,
     modifiedAt: Timestamp,
     organizationId: UUID,
-    createdBy: String,
-    modifiedBy: String,
+    createdBy: UUID,
+    modifiedBy: UUID,
     tag: String
 )
 
@@ -42,7 +42,7 @@ object ToolTag {
       tag: String
   ) {
 
-    def toToolTag(userId: String): ToolTag = {
+    def toToolTag(userId: UUID): ToolTag = {
       val now = new Timestamp((new java.util.Date()).getTime())
       ToolTag(
         UUID.randomUUID,

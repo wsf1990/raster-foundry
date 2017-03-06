@@ -20,9 +20,9 @@ class ToolRuns(_TableTag: Tag) extends Table[ToolRun](_TableTag, "tool_runs")
 
   val id: Rep[UUID]  = column[UUID]("id", O.PrimaryKey)
   val createdAt: Rep[Timestamp] = column[Timestamp]("created_at")
-  val createdBy: Rep[String] = column[String]("created_by")
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
   val modifiedAt: Rep[Timestamp] = column[Timestamp]("modified_at")
-  val modifiedBy: Rep[String] = column[String]("modified_by")
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
   val visibility: Rep[Visibility] = column[Visibility]("visibility")
   val organizationId: Rep[UUID] = column[UUID]("organization")
   val projectId: Rep[UUID] = column[UUID]("project")
@@ -43,7 +43,7 @@ object ToolRuns extends TableQuery(tag => new ToolRuns(tag)) with LazyLogging {
   implicit class withToolRunsTableQuery[M, U, C[_]](toolruns: ToolRuns.TableQuery) extends
       ToolRunDefaultQuery[M, U, C](toolruns)
 
-  def insertToolRun(tr: ToolRun.Create, userId: String): DBIO[ToolRun] =
+  def insertToolRun(tr: ToolRun.Create, userId: UUID): DBIO[ToolRun] =
     (ToolRuns returning ToolRuns).forceInsert(tr.toToolRun(userId))
 
   def getToolRun(id: UUID): DBIO[Option[ToolRun]] =

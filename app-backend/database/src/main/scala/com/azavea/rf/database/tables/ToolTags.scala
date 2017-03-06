@@ -32,9 +32,9 @@ class ToolTags(_tableTag: Tag)
 
   val id: Rep[UUID] = column[UUID]("id", O.PrimaryKey)
   val createdAt: Rep[Timestamp] = column[Timestamp]("created_at")
-  val createdBy: Rep[String] = column[String]("created_by", O.Length(255, varying = true))
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
   val modifiedAt: Rep[Timestamp] = column[Timestamp]("modified_at")
-  val modifiedBy: Rep[String] = column[String]("modified_by", O.Length(255, varying = true))
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
   val organizationId: Rep[UUID] = column[UUID]("organization_id")
   val tag: Rep[String] = column[String]("tag")
 
@@ -96,9 +96,9 @@ object ToolTags extends TableQuery(tag => new ToolTags(tag)) with LazyLogging {
   /** Insert a tool tag given a create case class with a user
     *
     * @param toolTagtoCreate ToolTag.Create object to use to create full tool tag
-    * @param userId           String user/owner to create a new tool tag with
+    * @param userId UUID user/owner to create a new tool tag with
     */
-  def insertToolTag(toolTagtoCreate: ToolTag.Create, userId: String)(
+  def insertToolTag(toolTagtoCreate: ToolTag.Create, userId: UUID)(
       implicit database: DB): Future[ToolTag] = {
     val toolTag = toolTagtoCreate.toToolTag(userId)
     val insertAction = ToolTags.forceInsert(toolTag)

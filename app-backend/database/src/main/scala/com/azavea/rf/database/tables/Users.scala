@@ -7,11 +7,13 @@ import com.typesafe.scalalogging.LazyLogging
 import com.lonelyplanet.akka.http.extensions.{PageRequest, Order}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import java.util.UUID
 
 class Users(_tableTag: Tag) extends Table[User](_tableTag, "users") {
-  def * = id <> (User.apply, User.unapply)
+  def * = (id, auth0id) <> (User.apply, User.unapply)
 
-  val id: Rep[String] = column[String]("id", O.PrimaryKey, O.Length(255,varying=true))
+  val id: Rep[UUID] = column[UUID]("id", O.PrimaryKey)
+  val auth0id: Rep[String] = column[String]("auth0id", O.Length(255,varying=true))
 }
 
 object Users extends TableQuery(tag => new Users(tag)) with LazyLogging {
@@ -122,13 +124,13 @@ object Users extends TableQuery(tag => new Users(tag)) with LazyLogging {
       Organizations.filter(_.name === "Public").result.headOption
     } flatMap {
       case Some(org) =>
-        createUser(User.Create(sub, org.id))
+        createUser(User.Create(UUID.randomUUID(), sub, org.id))
       case _ =>
         throw new Exception("No public org found in database")
     }
   }
 
-  def getUserById(id: String)(implicit database: DB): Future[Option[User]] = {
+  def getUserById(id: UUID)(implicit database: DB): Future[Option[User]] = {
     val getUserAction = Users.filter(_.id === id).result
     logger.debug(s"Attempting to retrieve user $id -- SQL: ${getUserAction.statements.headOption})")
 
@@ -137,7 +139,7 @@ object Users extends TableQuery(tag => new Users(tag)) with LazyLogging {
     }
   }
 
-  def getUserWithOrgsById(userId: String)(implicit database: DB): Future[Option[User.WithOrgs]] = {
+  def getUserWithOrgsById(userId: UUID)(implicit database: DB): Future[Option[User.WithOrgs]] = {
     database.db.run {
       joinUsersRolesOrgs(Users.filter(_.id === userId)).result
     } map {
@@ -147,6 +149,17 @@ object Users extends TableQuery(tag => new Users(tag)) with LazyLogging {
     } map {
       _.headOption
     }
+  }
 
+  def getUserByAuth0Id(auth0id: String)(implicit database: DB): Future[Option[User.WithOrgs]] = {
+    database.db.run {
+      joinUsersRolesOrgs(Users.filter(_.auth0id === auth0id)).result
+    } map {
+      joinTuples => joinTuples.map(joinTuple => User.RoleOrgJoin.tupled(joinTuple))
+    } map {
+      groupByUserId
+    } map {
+      _.headOption
+    }
   }
 }

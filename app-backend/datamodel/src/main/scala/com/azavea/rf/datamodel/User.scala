@@ -5,14 +5,14 @@ import spray.json.DefaultJsonProtocol._
 import java.sql.Timestamp
 import java.util.UUID
 
-case class User(id: String)
+case class User(id: UUID, auth0id: String)
 
 
 object User {
 
   def create = Create.apply _
 
-  implicit val defaultUserFormat = jsonFormat1(User.apply _)
+  implicit val defaultUserFormat = jsonFormat2(User.apply _)
 
   sealed abstract class Role(val repr: String) extends Product with Serializable
   case object UserRole extends Role("USER")
@@ -38,14 +38,15 @@ object User {
   }
 
   case class Create(
-    id: String,
+    id: UUID,
+    auth0id: String,
     organizationId: UUID,
     role: Role = Viewer
   ) {
     def toUsersOrgTuple(): (User, User.ToOrganization)= {
       val now = new Timestamp((new java.util.Date()).getTime())
       val newUUID = java.util.UUID.randomUUID
-      val user = User(id)
+      val user = User(id, auth0id)
 
       val userToOrg = User.ToOrganization(
         userId=id,
@@ -59,11 +60,11 @@ object User {
   }
 
   object Create {
-    implicit val defaultUserCreateFormat = jsonFormat3(Create.apply _)
+    implicit val defaultUserCreateFormat = jsonFormat4(Create.apply _)
   }
 
   case class ToOrganization(
-    userId: String,
+    userId: UUID,
     organizationId: UUID,
     role: User.Role,
     createdAt: Timestamp,
@@ -74,13 +75,13 @@ object User {
     implicit val defaultUserToOrgFormat = jsonFormat5(ToOrganization.apply _)
   }
 
-  case class WithRole(id: String, role: User.Role, createdAt: Timestamp, modifiedAt: Timestamp)
+  case class WithRole(id: UUID, role: User.Role, createdAt: Timestamp, modifiedAt: Timestamp)
   object WithRole {
     def tupled = (WithRole.apply _).tupled
     implicit val defaultUserWithRoleFormat = jsonFormat4(WithRole.apply _)
   }
 
-  case class WithRoleCreate(id: String, role: User.Role) {
+  case class WithRoleCreate(id: java.util.UUID, role: User.Role) {
     def toUserWithRole(): User.WithRole = {
       val now = new Timestamp((new java.util.Date()).getTime())
       User.WithRole(id, role, now, now)
@@ -92,13 +93,13 @@ object User {
   }
 
   // join between role and org
-  case class RoleOrgJoin(userId: String, orgId: java.util.UUID, orgName: String, userRole: User.Role)
+  case class RoleOrgJoin(userId: UUID, orgId: UUID, orgName: String, userRole: User.Role)
   object RoleOrgJoin {
     def tupled = (RoleOrgJoin.apply _).tupled
     implicit val defaultUserWithRoleFormat = jsonFormat4(RoleOrgJoin.apply _)
   }
 
-  case class WithOrgs(id: String, organizations: Seq[Organization.WithRole])
+  case class WithOrgs(id: UUID, organizations: Seq[Organization.WithRole])
   object WithOrgs {
     implicit val defaultUserWithOrgsFormat = jsonFormat2(WithOrgs.apply _)
   }

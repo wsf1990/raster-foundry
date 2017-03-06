@@ -30,12 +30,12 @@ class Datasources(_tableTag: Tag) extends Table[Datasource](_tableTag, "datasour
     Datasource.tupled, Datasource.unapply
   )
 
-  val id: Rep[java.util.UUID] = column[java.util.UUID]("id", O.PrimaryKey)
+  val id: Rep[UUID] = column[UUID]("id", O.PrimaryKey)
   val createdAt: Rep[java.sql.Timestamp] = column[java.sql.Timestamp]("created_at")
-  val createdBy: Rep[String] = column[String]("created_by", O.Length(255,varying=true))
+  val createdBy: Rep[UUID] = column[UUID]("created_by")
   val modifiedAt: Rep[java.sql.Timestamp] = column[java.sql.Timestamp]("modified_at")
-  val modifiedBy: Rep[String] = column[String]("modified_by", O.Length(255,varying=true))
-  val organizationId: Rep[java.util.UUID] = column[java.util.UUID]("organization_id")
+  val modifiedBy: Rep[UUID] = column[UUID]("modified_by")
+  val organizationId: Rep[UUID] = column[UUID]("organization_id")
   val name: Rep[String] = column[String]("name")
   val visibility: Rep[Visibility] = column[Visibility]("visibility")
   val colorCorrection: Rep[Map[String, Any]] = column[Map[String, Any]]("color_correction", O.Length(2147483647,varying=false))
