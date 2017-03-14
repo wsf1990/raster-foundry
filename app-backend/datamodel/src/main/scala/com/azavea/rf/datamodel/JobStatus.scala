@@ -33,4 +33,14 @@ object JobStatus {
         deserializationError("Failed to parse thumbnail size string representation (${js}) to JobStatus")
     }
   }
+
+  import io.circe._
+  import cats.syntax.either._
+  implicit val jobStatusEncoder: Encoder[JobStatus] =
+    Encoder.encodeString.contramap[JobStatus](_.toString)
+
+  implicit val jobStatusDecoder: Decoder[JobStatus] =
+    Decoder.decodeString.emap { str =>
+      Either.catchNonFatal(fromString(str)).leftMap(t => "JobStatus")
+    }
 }

@@ -10,7 +10,6 @@ import akka.http.scaladsl.server._
 import spray.json._
 import DefaultJsonProtocol._
 
-
 object ColorCorrect {
   case class Params(
     redBand: Int, greenBand: Int, blueBand: Int,

@@ -12,11 +12,16 @@ import com.azavea.rf.database.tables.Images
 import com.azavea.rf.database.Database
 import com.azavea.rf.datamodel._
 
+import io.circe._
+import io.circe.generic.auto._
+
+import de.heikoseeberger.akkahttpcirce.CirceSupport
 
 trait ImageRoutes extends Authentication
     with ImageQueryParametersDirective
     with PaginationDirectives
-    with UserErrorHandler {
+    with UserErrorHandler
+    with CirceSupport {
 
   implicit def database: Database
 

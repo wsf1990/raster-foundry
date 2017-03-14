@@ -97,6 +97,8 @@ object Projects extends TableQuery(tag => new Projects(tag)) with LazyLogging {
     )
 
     Scenes.listScenes(pageRequest, injectedParams, user)
+
+    ???.asInstanceOf[Future[PaginatedResponse[Scene.WithRelated]]]
   }
 
   def listProjectSceneOrder(projectId: UUID, pageRequest: PageRequest, user: User)

@@ -33,8 +33,6 @@ object Project extends GeoJsonSupport {
 
   def create = Create.apply _
 
-  implicit val defaultProjectFormat = jsonFormat14(Project.apply _)
-
   def slugify(input: String): String = {
     import java.text.Normalizer
     Normalizer.normalize(input, Normalizer.Form.NFD)
@@ -72,7 +70,5 @@ object Project extends GeoJsonSupport {
     }
   }
 
-  object Create {
-    implicit val defaultProjectFormat = jsonFormat6(Create.apply _)
-  }
+  object Create
 }

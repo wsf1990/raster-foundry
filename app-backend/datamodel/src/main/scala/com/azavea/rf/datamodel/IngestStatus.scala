@@ -46,4 +46,14 @@ object IngestStatus {
         deserializationError("Failed to parse ingest string representation (${js}) to IngestStatus")
     }
   }
+
+  import io.circe._
+  import cats.syntax.either._
+  implicit val ingestStatusEncoder: Encoder[IngestStatus] =
+    Encoder.encodeString.contramap[IngestStatus](_.toString)
+
+  implicit val ingestStatusDecoder: Decoder[IngestStatus] =
+    Decoder.decodeString.emap { str =>
+      Either.catchNonFatal(fromString(str)).leftMap(t => "IngestStatus")
+    }
 }

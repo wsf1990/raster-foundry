@@ -12,6 +12,8 @@ import geotrellis.slick.Projected
 import slick.collection.heterogeneous.{HList, HNil}
 import slick.collection.heterogeneous.syntax._
 
+import io.circe.Json
+
 case class SceneFilterFields(
   cloudCover: Option[Float] = None,
   acquisitionDate: Option[java.sql.Timestamp] = None,
@@ -20,8 +22,6 @@ case class SceneFilterFields(
 )
 
 object SceneFilterFields {
-  implicit val defaultSceneFilterFieldsJsonFormat = jsonFormat4(SceneFilterFields.apply)
-
   def tupled = (SceneFilterFields.apply _).tupled
 
   type TupleType = (
@@ -39,8 +39,6 @@ case class SceneStatusFields(
 )
 
 object SceneStatusFields {
-  implicit val defaultSceneStatusFieldsJsonFormat = jsonFormat3(SceneStatusFields.apply)
-
   def tupled = (SceneStatusFields.apply _).tupled
 
   type TupleType = (
@@ -61,7 +59,7 @@ case class Scene(
   visibility: Visibility,
   tags: List[String],
   datasource: UUID,
-  sceneMetadata: Map[String, Any],
+  sceneMetadata: Json,
   name: String,
   tileFootprint: Option[Projected[Geometry]] = None,
   dataFootprint: Option[Projected[Geometry]] = None,
@@ -71,8 +69,6 @@ case class Scene(
   statusFields: SceneStatusFields
 ) {
   def toScene = this
-
-
 
   def withRelatedFromComponents(
     images: Seq[Image.WithRelated],
@@ -104,8 +100,6 @@ case class Scene(
 
 object Scene extends GeoJsonSupport {
 
-  implicit val defaultSceneFormat = jsonFormat18(Scene.apply)
-
   /** Case class extracted from a POST request */
   case class Create(
     id: Option[UUID],
@@ -114,7 +108,7 @@ object Scene extends GeoJsonSupport {
     visibility: Visibility,
     tags: List[String],
     datasource: UUID,
-    sceneMetadata: Map[String, Any],
+    sceneMetadata: Json,
     name: String,
     tileFootprint: Option[Projected[Geometry]],
     dataFootprint: Option[Projected[Geometry]],
@@ -150,9 +144,7 @@ object Scene extends GeoJsonSupport {
     }
   }
 
-  object Create {
-    implicit val defaultThumbnailWithRelatedFormat = jsonFormat16(Create.apply)
-  }
+  object Create
 
   case class WithRelated(
     id: UUID,
@@ -165,7 +157,7 @@ object Scene extends GeoJsonSupport {
     visibility: Visibility,
     tags: List[String],
     datasource: UUID,
-    sceneMetadata: Map[String, Any],
+    sceneMetadata: Json,
     name: String,
     tileFootprint: Option[Projected[Geometry]],
     dataFootprint: Option[Projected[Geometry]],
@@ -178,8 +170,6 @@ object Scene extends GeoJsonSupport {
   )
 
   object WithRelated {
-    implicit val defaultSceneWithRelatedFormat = ScenesJsonProtocol.SceneWithRelatedFormat
-
     /** Helper function to create Iterable[Scene.WithRelated] from join
       *
       * It is necessary to map over the distinct scenes because that is the only way to

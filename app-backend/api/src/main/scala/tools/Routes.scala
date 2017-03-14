@@ -16,7 +16,11 @@ import scala.util.{Success, Failure}
 import java.util.UUID
 
 
-trait ToolRoutes extends Authentication with PaginationDirectives with UserErrorHandler {
+trait ToolRoutes extends Authentication
+    with PaginationDirectives
+    with UserErrorHandler
+    with CirceSupport {
+
   implicit def database: Database
 
   val toolRoutes: Route = handleExceptions(userExceptionHandler) {
