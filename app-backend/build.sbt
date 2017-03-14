@@ -103,6 +103,7 @@ lazy val root = Project("root", file("."))
 lazy val api = Project("api", file("api"))
   .dependsOn(database, datamodel, common)
   .settings(apiSettings:_*)
+  .settings(resolvers += Resolver.bintrayRepo("hseeberger", "maven"))
   .settings({
     libraryDependencies ++= apiDependencies
   })

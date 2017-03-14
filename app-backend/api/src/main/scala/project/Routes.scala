@@ -11,7 +11,6 @@ import io.circe._
 import io.circe.generic.auto._
 import io.circe.parser._
 import io.circe.syntax._
-
 import com.azavea.rf.common.{Authentication, UserErrorHandler}
 import com.azavea.rf.database.tables._
 import com.azavea.rf.database.query._
@@ -19,7 +18,7 @@ import com.azavea.rf.database.Database
 import com.azavea.rf.datamodel._
 import com.azavea.rf.api.scene._
 import com.azavea.rf.api.utils.queryparams.QueryParametersCommon
-import de.heikoseeberger.akkahttpcirce.CirceSupport
+import de.heikoseeberger.akkahttpcirce.CirceSupport._
 
 import java.util.UUID
 
@@ -28,8 +27,7 @@ trait ProjectRoutes extends Authentication
     with QueryParameterJsonFormat
     with SceneQueryParameterDirective
     with PaginationDirectives
-    with UserErrorHandler
-    with CirceSupport {
+    with UserErrorHandler {
 
   implicit def database: Database
 
