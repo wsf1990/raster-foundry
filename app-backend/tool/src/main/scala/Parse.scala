@@ -2,7 +2,6 @@ package com.azavea.rf.tool
 
 import spray.json._
 import geotrellis.raster.op._
-import shapeless._
 
 object Defines {
   // Functions available in curren `include` scope

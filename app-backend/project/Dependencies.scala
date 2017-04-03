@@ -39,7 +39,6 @@ object Dependencies {
   val caffeine                = "com.github.ben-manes.caffeine" % "caffeine"                         % Version.caffeine
   val scaffeine               = "com.github.blemale"          %% "scaffeine"                         % Version.scaffeine
   val elasticacheClient       = "com.amazonaws"                % "elasticache-java-cluster-client"   % Version.elasticacheClient
-  val shapeless               = "com.chuusai"                 %% "shapeless"                         % Version.shapeless
   val findbugAnnotations      = "com.google.code.findbugs"     % "annotations"                       % Version.findbugAnnotations % "compile"
   val chill                   = "com.twitter"                 %% "chill"                             % Version.chill
   val circeCore               = "io.circe"                    %% "circe-core"                        % Version.circe
