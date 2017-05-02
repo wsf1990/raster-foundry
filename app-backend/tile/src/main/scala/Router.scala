@@ -29,9 +29,13 @@ class Router extends LazyLogging
         }
       } ~
       tileAuthenticateOption { _ =>
-        SceneRoutes.root ~
-        pathPrefix("tools") {
-          toolRoutes.root(TileSources.cachedTmsSource)
+        SceneRoutes.root
+      } ~
+      pathPrefix("tools") {
+        get {
+          tileAuthenticateOption { _ =>
+            toolRoutes.tms(TileSources.cachedTmsSource)
+          }
         }
       } ~
       pathPrefix(JavaUUID) { projectId =>
