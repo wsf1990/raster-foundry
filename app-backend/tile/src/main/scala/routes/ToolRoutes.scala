@@ -9,7 +9,7 @@ import com.azavea.rf.tool.eval._
 import com.azavea.rf.tool.params._
 
 import akka.http.scaladsl.marshalling._
-import akka.http.scaladsl.model.{ContentType, HttpEntity, MediaTypes}
+import akka.http.scaladsl.model.{ContentType, HttpEntity, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server._
 import cats.data._
 import cats.data.Validated._
@@ -50,42 +50,59 @@ class ToolRoutes(implicit val database: Database) extends Authentication
     }.toMap
   }
 
+  val preflight =
+    (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
+      pathPrefix(JavaUUID){ (toolRunId) =>
+        post {
+          entity(as[UUID]) { nodeId =>
+            authenticate { user =>
+              onSuccess(LayerCache.toolEvalRequirements(toolRunId, Some(nodeId), user).value) { _ =>
+                complete { StatusCodes.NoContent }
+              }
+            }
+          }
+        }
+      }
+    }
+
   /** The central endpoint for ModelLab; serves TMS tiles given a [[ToolRun]] specification */
   def tms(
     source: (RFMLRaster, Int, Int, Int) => Future[Option[Tile]]
   ): Route =
-    pathPrefix(JavaUUID){ (toolRunId) =>
-      (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
-        authenticateWithParameter { user =>
-          pathPrefix(IntNumber / IntNumber / IntNumber) { (z, x, y) =>
-            parameter(
-              'node.?,
-              'geotiff.?(false),
-              'cramp.?("viridis")
-            ) { (node, geotiffOutput, colorRamp) =>
-              complete {
-                val nodeId = node.map(UUID.fromString(_))
-                val responsePng = for {
-                  (toolRun, tool, ast, params, cMap) <- LayerCache.toolEvalRequirements(toolRunId, nodeId, user)
-                  tile    <- OptionT({
-                               val tms = Interpreter.interpretTMS(ast, params.sources, source)
-                               logger.debug(s"Attempting to retrieve TMS tile at $z/$x/$y")
-                               tms(z, x, y).map {
-                                 case Valid(op) => op.evaluateDouble
-                                 case Invalid(errors) => throw InterpreterException(errors)
-                               }
-                             })
-                } yield {
-                  logger.debug(s"Tile successfully produced at $z/$x/$y")
-                  tile.renderPng(cMap)
+    (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
+      pathPrefix(JavaUUID){ (toolRunId) =>
+        get {
+          authenticateWithParameter { user =>
+            pathPrefix(IntNumber / IntNumber / IntNumber) { (z, x, y) =>
+              parameter(
+                'node.?,
+                'geotiff.?(false),
+                'cramp.?("viridis")
+              ) { (node, geotiffOutput, colorRamp) =>
+                complete {
+                  val nodeId = node.map(UUID.fromString(_))
+                  val responsePng = for {
+                    (toolRun, tool, ast, params, cMap) <- LayerCache.toolEvalRequirements(toolRunId, nodeId, user)
+                    tile    <- OptionT({
+                                 val tms = Interpreter.interpretTMS(ast, params.sources, source)
+                                 logger.debug(s"Attempting to retrieve TMS tile at $z/$x/$y")
+                                 tms(z, x, y).map {
+                                   case Valid(op) => op.evaluateDouble
+                                   case Invalid(errors) => throw InterpreterException(errors)
+                                 }
+                               })
+                  } yield {
+                    logger.debug(s"Tile successfully produced at $z/$x/$y")
+                    tile.renderPng(cMap)
+                  }
+                  responsePng.value
                 }
-                responsePng.value
               }
-            }
-          } ~
-          pathPrefix("validate") {
-            authenticateWithParameter { user =>
-              complete(validateAST[Unit](toolRunId, user))
+            } ~
+            pathPrefix("validate") {
+              authenticateWithParameter { user =>
+                complete(validateAST[Unit](toolRunId, user))
+              }
             }
           }
         }

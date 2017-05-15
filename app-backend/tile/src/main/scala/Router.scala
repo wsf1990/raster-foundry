@@ -19,6 +19,12 @@ class Router extends LazyLogging
 
   def root = handleExceptions(tileExceptionHandler) {
     pathPrefix("tiles") {
+      pathPrefix(JavaUUID) { projectId =>
+        tileAccessAuthorized(projectId) {
+          case true => MosaicRoutes.mosaicProject(projectId)(database)
+          case _ => reject(AuthorizationFailedRejection)
+        }
+      } ~
       pathPrefix("healthcheck") {
         pathEndOrSingleSlash {
           get {
@@ -32,17 +38,10 @@ class Router extends LazyLogging
         SceneRoutes.root
       } ~
       pathPrefix("tools") {
-        get {
-          tileAuthenticateOption { _ =>
-            toolRoutes.tms(TileSources.cachedTmsSource)
-          }
-        }
-      } ~
-      pathPrefix(JavaUUID) { projectId =>
-        tileAccessAuthorized(projectId) {
-          case true => MosaicRoutes.mosaicProject(projectId)(database)
-          case _ => reject(AuthorizationFailedRejection)
-        }
+        tileAuthenticateOption { _ =>
+          toolRoutes.tms(TileSources.cachedTmsSource)
+        } ~
+        toolRoutes.preflight
       }
     }
   }
