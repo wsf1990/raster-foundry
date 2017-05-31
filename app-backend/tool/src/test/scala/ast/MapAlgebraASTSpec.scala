@@ -1,5 +1,6 @@
 package com.azavea.rf.tool.ast
 
+import com.azavea.rf.tool.ast.MapAlgebraAST._
 import com.azavea.rf.tool.ast.codec._
 import com.azavea.rf.tool.eval._
 
@@ -26,5 +27,14 @@ class MapAlgebraASTSpec extends FunSpec with Matchers {
     val uberAst = src1 + src2 * src3 / src4 max src5 min src6
 
     uberAst.find(src4.id) should be (Some(src4))
+  }
+
+  it("Can substitute ToolRef branches") {
+    val src1 = randomSourceAST
+    val replacement = randomSourceAST
+    val ref = ToolReference(UUID.randomUUID, replacement.id)
+    val preSub = src1 + ref
+
+    preSub.substitute(Map(ref.toolId -> replacement)).get.args.toSeq should be ((src1 + replacement).args.toSeq)
   }
 }
