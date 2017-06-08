@@ -59,17 +59,21 @@ object Mosaic {
       val resolutionDiff = 1 << zoomDiff
       val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
       if (tlm.bounds.includes(sourceKey)) {
-        LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
+        LayerCache.layerTile(id, sourceZoom, sourceKey).flatMap { tile =>
           val innerCol = col % resolutionDiff
           val innerRow = row % resolutionDiff
           val cols = tile.cols / resolutionDiff
           val rows = tile.rows / resolutionDiff
-          tile.crop(GridBounds(
+          val ctile = tile.crop(GridBounds(
             colMin = innerCol * cols,
             rowMin = innerRow * rows,
             colMax = (innerCol + 1) * cols - 1,
             rowMax = (innerRow + 1) * rows - 1
           )).resample(256, 256)
+
+          // After resample tile may be empty
+          if (ctile.bands.map(!_.isNoDataTile).reduce(_ || _)) OptionT.fromOption(ctile.some)
+          else OptionT.none[Future, MultibandTile]
         }
       } else {
         OptionT.none[Future, MultibandTile]
@@ -224,7 +228,7 @@ object Mosaic {
             // Wrap in List so it can flattened by the same flatMap above
             List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
-        }.toSeq
+        }
         Future.sequence(tiles).map(_.flatten)
       }
 
@@ -243,7 +247,7 @@ object Mosaic {
     mosaicDefinition(projectId, None).map { mosaic =>
       mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
         maybeColorCorrectParams.map(_.autoBalance.enabled)
-      }.foldLeft(true)((acc, x) => acc && x)
+      }.forall(identity)
     }.value.map {
       case Some(true) => true
       case _ => false

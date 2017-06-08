@@ -103,8 +103,10 @@ object LayerCache extends Config with LazyLogging {
           Try {
             reader.read(key)
           } match {
-            case Success(tile) => Option(tile)
-            case Failure(e: ValueNotFoundError) => None
+            // return only non empty tiles, at least one band should be non empty
+            case Success(tile) if tile.bands.map(!_.isNoDataTile).reduce(_ || _) => Option(tile)
+            case Success(_) => None
+            case Failure(_: ValueNotFoundError) => None
             case Failure(e) =>
               logger.error(s"Reading layer $layerId at $key: ${e.getMessage}")
               None
@@ -127,7 +129,12 @@ object LayerCache extends Config with LazyLogging {
               .crop(extent)
               .tile
           } match {
-            case Success(tile) => Option(tile)
+            // return only non empty tiles, at least one band should be non empty
+            case Success(tile) if tile.bands.map(!_.isNoDataTile).reduce(_ || _) => Option(tile)
+            case Success(_) => {
+              logger.error(s"Query layer $layerId at zoom $zoom for $extent: all requested tiles contain only nodata values")
+              None
+            }
             case Failure(e) =>
               logger.error(s"Query layer $layerId at zoom $zoom for $extent: ${e.getMessage}")
               None
