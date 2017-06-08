@@ -33,6 +33,7 @@ import scala.util._
 import cats.data._
 import cats.implicits._
 import com.carrotsearch.sizeof.RamUsageEstimator
+import org.apache.log4j.{Level, Logger}
 
 
 /**
@@ -45,6 +46,8 @@ import com.carrotsearch.sizeof.RamUsageEstimator
   * things that require time to generate, usually a network fetch, use AsyncLoadingCache
   */
 object LayerCache extends Config with LazyLogging {
+  Logger.getLogger("net.spy.memcached").setLevel(Level.ALL)
+
   implicit val database = Database.DEFAULT
 
   val memcachedClient = KryoMemcachedClient.DEFAULT
