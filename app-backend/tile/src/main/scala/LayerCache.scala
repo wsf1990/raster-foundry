@@ -97,11 +97,21 @@ object LayerCache extends Config with LazyLogging {
 
   def layerTile(layerId: UUID, zoom: Int, key: SpatialKey): OptionT[Future, MultibandTile] =
     tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
-      val r = attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
+      attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
         val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
         blocking {
           Try {
-            reader.read(key)
+            val tile = reader.read(key)
+
+            val bytes = RamUsageEstimator.sizeOf(tile)
+            val kbytes = bytes / 1024
+            val mbytes = kbytes / 1024
+
+            logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${bytes} B")
+            logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${kbytes} KB")
+            logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${mbytes} MB")
+
+            tile
           } match {
             // return only non empty tiles, at least one band should be non empty
             case Success(tile) if tile.bands.map(!_.isNoDataTile).reduce(_ || _) => Option(tile)
@@ -113,16 +123,6 @@ object LayerCache extends Config with LazyLogging {
           }
         }
       }
-
-      val bytes = RamUsageEstimator.sizeOf(r)
-      val kbytes = bytes / 1024
-      val mbytes = kbytes / 1024
-
-      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${bytes} B")
-      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${kbytes} KB")
-      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${mbytes} MB")
-
-      r
     }
 
 
