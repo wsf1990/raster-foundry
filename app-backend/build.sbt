@@ -215,6 +215,7 @@ lazy val tile = Project("tile", file("tile"))
   .settings(commonSettings:_*)
   .settings({
     libraryDependencies ++= loggingDependencies ++ testDependencies ++ Seq(
+      "com.carrotsearch" % "java-sizeof" % "0.0.5",
       Dependencies.spark,
       Dependencies.geotrellisSpark,
       Dependencies.geotrellisS3,

@@ -11,7 +11,6 @@ import com.azavea.rf.common.cache._
 import com.azavea.rf.common.cache.kryo.KryoMemcachedClient
 import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables._
-
 import io.circe._
 import io.circe.syntax._
 import geotrellis.raster._
@@ -20,19 +19,20 @@ import geotrellis.raster.histogram._
 import geotrellis.spark._
 import geotrellis.raster.io._
 import geotrellis.spark.io._
-import geotrellis.spark.io.s3.{S3InputFormat, S3AttributeStore, S3CollectionLayerReader, S3ValueReader}
+import geotrellis.spark.io.s3.{S3AttributeStore, S3CollectionLayerReader, S3InputFormat, S3ValueReader}
 import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import geotrellis.vector.Extent
 import com.typesafe.scalalogging.LazyLogging
 import spray.json.DefaultJsonProtocol._
-
 import java.security.InvalidParameterException
 import java.util.UUID
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util._
 import cats.data._
 import cats.implicits._
+import com.carrotsearch.sizeof.RamUsageEstimator
 
 
 /**
@@ -97,7 +97,7 @@ object LayerCache extends Config with LazyLogging {
 
   def layerTile(layerId: UUID, zoom: Int, key: SpatialKey): OptionT[Future, MultibandTile] =
     tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
-      attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
+      val r = attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
         val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
         blocking {
           Try {
@@ -113,6 +113,16 @@ object LayerCache extends Config with LazyLogging {
           }
         }
       }
+
+      val bytes = RamUsageEstimator.sizeOf(r)
+      val kbytes = bytes / 1024
+      val mbytes = kbytes / 1024
+
+      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${bytes} B")
+      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${kbytes} KB")
+      logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${mbytes} MB")
+
+      r
     }
 
 
