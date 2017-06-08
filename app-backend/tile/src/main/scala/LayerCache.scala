@@ -104,8 +104,8 @@ object LayerCache extends Config with LazyLogging {
             val tile = reader.read(key)
 
             val bytes = RamUsageEstimator.sizeOf(tile)
-            val kbytes = bytes / 1024
-            val mbytes = kbytes / 1024
+            val kbytes = bytes / 1024d
+            val mbytes = kbytes / 1024d
 
             logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${bytes} B")
             logger.info(s"tile-$layerId-$zoom-${key.col}-${key.row} size: ${kbytes} KB")
