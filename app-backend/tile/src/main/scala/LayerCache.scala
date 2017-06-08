@@ -46,8 +46,6 @@ import org.apache.log4j.{Level, Logger}
   * things that require time to generate, usually a network fetch, use AsyncLoadingCache
   */
 object LayerCache extends Config with LazyLogging {
-  Logger.getLogger("net.spy.memcached").setLevel(Level.ALL)
-
   implicit val database = Database.DEFAULT
 
   val memcachedClient = KryoMemcachedClient.DEFAULT
