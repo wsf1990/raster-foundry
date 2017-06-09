@@ -12,26 +12,26 @@ import java.util
   * LazyLogging dirty trait
   */
 trait TimingLogging { self =>
-  @transient protected lazy val tlogger: Logger = Logger.getLogger(self.getClass)
+  //@transient protected lazy val tlogger: Logger = Logger.getLogger(self.getClass)
   val withTimings: Boolean = true
 
   protected val logBuffer = new util.concurrent.ConcurrentHashMap[String, mutable.ListBuffer[String]]()
 
   def timedCreate[T](id: String, startMsg: String, endMsg: String)(f: => T): T = {
     if(withTimings) {
-      val writer = new StringWriter()
-      val appender = new WriterAppender(new PatternLayout(), writer)
+      //val writer = new StringWriter()
+      //val appender = new WriterAppender(new PatternLayout(), writer)
 
-      tlogger.info(startMsg)
-      tlogger.addAppender(appender)
+      println(startMsg)
+      //tlogger.addAppender(appender)
       val s = System.currentTimeMillis
       val result = f
       val e = System.currentTimeMillis
       val t = "%,d".format(e - s)
-      tlogger.info(s"\t$endMsg (in $t ms)")
-      writer.flush()
-      tlogger.removeAppender(appender)
-      Option(logBuffer.get(id)).fold(logBuffer.put(id, mutable.ListBuffer(writer.toString)))(_ += writer.toString)
+      println(s"\t$endMsg (in $t ms)")
+      //writer.flush()
+      //tlogger.removeAppender(appender)
+      Option(logBuffer.get(id)).fold(logBuffer.put(id, mutable.ListBuffer(s"\t$endMsg (in $t ms)")))(_ += s"\t$endMsg (in $t ms)")
 
       result
     } else f
