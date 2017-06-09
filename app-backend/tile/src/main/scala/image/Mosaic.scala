@@ -4,8 +4,7 @@ import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.{MosaicDefinition, WhiteBalance}
 import com.azavea.rf.common.cache._
-
-import com.github.blemale.scaffeine.{ Cache => ScaffeineCache, Scaffeine }
+import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import com.azavea.rf.tile._
 import geotrellis.raster._
 import geotrellis.spark._
@@ -13,10 +12,13 @@ import geotrellis.spark.io._
 import geotrellis.raster.GridBounds
 import geotrellis.proj4._
 import geotrellis.slick.Projected
-import geotrellis.vector.{Polygon, Extent}
+import geotrellis.vector.{Extent, Polygon}
 import cats.data._
 import cats.implicits._
 import java.util.UUID
+
+import com.azavea.rf.tile.util.TimingLogging
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -24,7 +26,7 @@ import scala.concurrent.duration._
 
 case class TagWithTTL(tag: String, ttl: Duration)
 
-object Mosaic {
+object Mosaic extends TimingLogging {
   val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
@@ -55,28 +57,32 @@ object Mosaic {
   /** Fetch the tile for given resolution. If it is not present, use a tile from a lower zoom level */
   def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] =
     tileLayerMetadata(id, zoom).flatMap { case (sourceZoom, tlm) =>
-      val zoomDiff = zoom - sourceZoom
-      val resolutionDiff = 1 << zoomDiff
-      val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
-      if (tlm.bounds.includes(sourceKey)) {
-        LayerCache.layerTile(id, sourceZoom, sourceKey).flatMap { tile =>
-          val innerCol = col % resolutionDiff
-          val innerRow = row % resolutionDiff
-          val cols = tile.cols / resolutionDiff
-          val rows = tile.rows / resolutionDiff
-          val ctile = tile.crop(GridBounds(
-            colMin = innerCol * cols,
-            rowMin = innerRow * rows,
-            colMax = (innerCol + 1) * cols - 1,
-            rowMax = (innerRow + 1) * rows - 1
-          )).resample(256, 256)
+      timedCreate("Mosaic", "60::fetch start", "60::fetch finish") {
+        val zoomDiff = zoom - sourceZoom
+        val resolutionDiff = 1 << zoomDiff
+        val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
+        if (tlm.bounds.includes(sourceKey)) {
+          LayerCache.layerTile(id, sourceZoom, sourceKey).flatMap { tile =>
+            timedCreate("Mosaic", "66::insidelayertile start", "66::insidelayertile finish") {
+              val innerCol = col % resolutionDiff
+              val innerRow = row % resolutionDiff
+              val cols = tile.cols / resolutionDiff
+              val rows = tile.rows / resolutionDiff
+              val ctile = tile.crop(GridBounds(
+                colMin = innerCol * cols,
+                rowMin = innerRow * rows,
+                colMax = (innerCol + 1) * cols - 1,
+                rowMax = (innerRow + 1) * rows - 1
+              )).resample(256, 256)
 
-          // After resample tile may be empty
-          if (ctile.bands.map(!_.isNoDataTile).reduce(_ || _)) OptionT.fromOption(ctile.some)
-          else OptionT.none[Future, MultibandTile]
+              // After resample tile may be empty
+              if (ctile.bands.map(!_.isNoDataTile).reduce(_ || _)) OptionT.fromOption(ctile.some)
+              else OptionT.none[Future, MultibandTile]
+            }
+          }
+        } else {
+          OptionT.none[Future, MultibandTile]
         }
-      } else {
-        OptionT.none[Future, MultibandTile]
       }
     }
 
@@ -210,36 +216,41 @@ object Mosaic {
   )(
     implicit database: Database
   ): OptionT[Future, MultibandTile] = {
-    // Lookup project definition
-    // tag present, include in lookup to re-use cache
-    // no tag to control cache rollover, so don't cache
-    mosaicDefinition(projectId, tag.map(s => TagWithTTL(tag=s, ttl=60.seconds))).flatMap { mosaic =>
-      val futureTiles: Future[Seq[MultibandTile]] = {
-        val tiles = mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
-          if (rgbOnly) {
-            maybeColorCorrectParams.map { colorCorrectParams =>
-              Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
-                LayerCache.layerHistogram(sceneId, zoom).map { hist =>
-                  colorCorrectParams.colorCorrect(tile, hist)
-                }
-              }.value
+    val result = timedCreate("Mosaic", "215::apply start", "215::apply finish") {
+      // Lookup project definition
+      // tag present, include in lookup to re-use cache
+      // no tag to control cache rollover, so don't cache
+      mosaicDefinition(projectId, tag.map(s => TagWithTTL(tag = s, ttl = 60.seconds))).flatMap { mosaic =>
+        val futureTiles: Future[Seq[MultibandTile]] = {
+          val tiles = mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
+            if (rgbOnly) {
+              maybeColorCorrectParams.map { colorCorrectParams =>
+                Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
+                  LayerCache.layerHistogram(sceneId, zoom).map { hist =>
+                    timedCreate("Mosaic", "226::colorCorrect start", "226::colorCorrect finish") { colorCorrectParams.colorCorrect(tile, hist) }
+                  }
+                }.value
+              }
+            } else {
+              // Wrap in List so it can flattened by the same flatMap above
+              List(Mosaic.fetch(sceneId, zoom, col, row).value)
             }
-          } else {
-            // Wrap in List so it can flattened by the same flatMap above
-            List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
+          Future.sequence(tiles).map(_.flatten)
         }
-        Future.sequence(tiles).map(_.flatten)
+
+        val futureMergeTile =
+          for {
+            doColorCorrect <- hasColorCorrection(projectId)
+            tiles <- futureTiles
+          } yield colorCorrectAndMergeTiles(tiles, doColorCorrect)
+
+        OptionT(futureMergeTile)
       }
-
-      val futureMergeTile =
-        for {
-          doColorCorrect <- hasColorCorrection(projectId)
-          tiles <- futureTiles
-        } yield colorCorrectAndMergeTiles(tiles, doColorCorrect)
-
-      OptionT(futureMergeTile)
     }
+
+    printBuffer("Mosaic")
+    result
   }
 
   /** Check to see if a project has color correction; if this isn't specified, default to false */
@@ -255,15 +266,21 @@ object Mosaic {
 
   /** Merge tiles together, optionally color correcting */
   def colorCorrectAndMergeTiles(tiles: Seq[MultibandTile], doColorCorrect: Boolean): Option[MultibandTile] = {
-    val newTiles =
-      if (doColorCorrect)
-        WhiteBalance(tiles.toList)
-      else
-        tiles
+    timedCreate("Mosaic", "268::colorCorrectAndMergeTiles start", "268::colorCorrectAndMergeTiles finish") {
+      val newTiles =
+        if (doColorCorrect)
+          timedCreate("Mosaic", "271::WhiteBalance start", "271::WhiteBalance finish") {
+            WhiteBalance(tiles.toList)
+          }
+        else
+          tiles
 
-    if (newTiles.isEmpty)
-      None
-    else
-      Some(newTiles.reduce(_ merge _))
+      if (newTiles.isEmpty)
+        None
+      else
+        timedCreate("Mosaic", "280::newTiles.reduce(_ merge _) start", "280::newTiles.reduce(_ merge _) finish") {
+          Some(newTiles.reduce(_ merge _))
+        }
+    }
   }
 }

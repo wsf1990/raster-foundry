@@ -2,13 +2,11 @@ package com.azavea.rf.tile.routes
 
 import cats.data.OptionT
 import cats.implicits._
-
 import com.azavea.rf.tile._
 import com.azavea.rf.tile.image._
 import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.ColorCorrect
-
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff._
 import geotrellis.raster.render.Png
@@ -19,18 +17,19 @@ import akka.http.scaladsl.unmarshalling._
 import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
-import scala.collection.mutable.ArrayBuffer
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import java.util.UUID
 
 import akka.http.scaladsl.marshalling.Marshaller
+import com.azavea.rf.tile.util.TimingLogging
 import geotrellis.proj4._
 import geotrellis.slick.Projected
 import geotrellis.vector.{Extent, Polygon}
 
-object MosaicRoutes extends LazyLogging {
+object MosaicRoutes extends LazyLogging with TimingLogging {
 
   val emptyTilePng = IntArrayTile.ofDim(256, 256).renderPng
 
@@ -40,7 +39,7 @@ object MosaicRoutes extends LazyLogging {
   def tiffAsHttpResponse(tiff: MultibandGeoTiff): HttpResponse =
     HttpResponse(entity = HttpEntity(ContentType(MediaTypes.`image/tiff`), tiff.toByteArray))
 
-  def mosaicProject(projectId: UUID)(implicit database: Database): Route =
+  def mosaicProject(projectId: UUID)(implicit database: Database): Route = { val res = timedCreate("mosaicProject", "MosaicRoutes::42 start", "MosaicRoutes::42 finish") {
     pathPrefix("export") {
       optionalHeaderValueByName("Accept") { acceptContentType =>
         parameter("bbox", "zoom".as[Int]?, "colorCorrect".as[Boolean] ? true) {
@@ -69,14 +68,25 @@ object MosaicRoutes extends LazyLogging {
       parameter("tag".?) { tag =>
         get {
           complete {
-            Mosaic(projectId, zoom, x, y, tag)
-              .map(_.renderPng)
-              .getOrElse(emptyTilePng)
-              .map(pngAsHttpResponse)
+            val mosaic =
+              timedCreate("mosaicProject", "MosaicRoutes::72 start", "MosaicRoutes::72 finish") {
+                Mosaic(projectId, zoom, x, y, tag)
+              }
+
+             val render =
+               timedCreate("mosaicProject", "MosaicRoutes::77 start", "MosaicRoutes::77 finish") {
+                 mosaic.map(_.renderPng).getOrElse(emptyTilePng).map(pngAsHttpResponse)
+               }
+
+            render
           }
         }
       }
-    }
+    } }
+
+    printBuffer("mosaicProject")
+    res
+   }
 
   /** Return the histogram (with color correction applied) for a list of scenes in a project */
   def getProjectScenesHistogram(projectId: UUID)(implicit database: Database): Route = {
