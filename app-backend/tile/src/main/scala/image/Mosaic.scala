@@ -249,7 +249,10 @@ object Mosaic extends TimingLogging {
       }
     }
 
-    printBuffer("Mosaic")
+    result.value onComplete {
+      case _ => printBuffer("Mosaic")
+    }
+
     result
   }
 
