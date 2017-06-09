@@ -22,13 +22,13 @@ trait TimingLogging { self =>
       //val writer = new StringWriter()
       //val appender = new WriterAppender(new PatternLayout(), writer)
 
-      println(startMsg)
+      //println(startMsg)
       //tlogger.addAppender(appender)
       val s = System.currentTimeMillis
       val result = f
       val e = System.currentTimeMillis
       val t = "%,d".format(e - s)
-      println(s"\t$endMsg (in $t ms)")
+      //println(s"\t$endMsg (in $t ms)")
       //writer.flush()
       //tlogger.removeAppender(appender)
       Option(logBuffer.get(id)).fold(logBuffer.put(id, mutable.ListBuffer(s"\t$endMsg (in $t ms)")))(_ += s"\t$endMsg (in $t ms)")
