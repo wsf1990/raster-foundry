@@ -444,6 +444,7 @@ object ColorCorrect extends TimingLogging {
 
     // Apply tile transformations in order from left to right
     val result = timedCreate("ColorCorrect", "446::result start", "446::result finish") { transformations.foldLeft(rgbTile){ (t, f) => f(t) } }
+    printBuffer("ColorCorrect")
     result
   }
 
