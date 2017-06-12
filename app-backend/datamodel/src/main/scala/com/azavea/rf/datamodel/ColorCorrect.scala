@@ -15,6 +15,7 @@ import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.sigmoidal.SigmoidalContrast
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
+import com.azavea.rf.datamodel.util._
 
 import scala.math._
 import scala.annotation.tailrec
@@ -305,13 +306,13 @@ object ColorCorrect {
     saturation: Saturation,
     equalize: Equalization,
     autoBalance: AutoWhiteBalance
-  ) {
+  ) extends TimingLogging {
     def reorderBands(tile: MultibandTile, hist: Seq[Histogram[Double]]): (MultibandTile, Array[Histogram[Double]]) =
       (tile.subsetBands(redBand, greenBand, blueBand), Array(hist(redBand), hist(greenBand), hist(blueBand)))
 
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
-      val (rgbTile, rgbHist) = reorderBands(tile, hist)
-      ColorCorrect(rgbTile, rgbHist, this)
+      val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
+      timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") { ColorCorrect(rgbTile, rgbHist, this) }
     }
   }
 
@@ -325,7 +326,7 @@ object ColorCorrect {
     case class MaybeClipBounds(maybeMin: Option[Int], maybeMax: Option[Int]) extends ClipValue
     case class ClippingParams(band: Int, bounds: ClipValue)
 
-    val layerRgbClipping = (for {
+    val layerRgbClipping: LayerClipping = (for {
       (r :: g :: b :: xs) <- Some(rgbHist.toList)
       isCorrected   <- Some((r :: g :: b :: Nil).foldLeft(true) {(acc, hst) => (
                           acc && (hst match {
