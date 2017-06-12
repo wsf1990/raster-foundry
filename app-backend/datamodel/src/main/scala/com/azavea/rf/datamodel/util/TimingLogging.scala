@@ -1,7 +1,5 @@
 package com.azavea.rf.datamodel.util
 
-import org.apache.log4j.{PatternLayout, WriterAppender, Logger}
-
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 
