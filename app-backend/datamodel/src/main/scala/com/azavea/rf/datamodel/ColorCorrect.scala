@@ -312,7 +312,8 @@ object ColorCorrect {
 
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
       val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
-      timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") { ColorCorrect(rgbTile, rgbHist, this) }
+      val result = timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") { ColorCorrect(rgbTile, rgbHist, this) }
+      result
     }
   }
 
