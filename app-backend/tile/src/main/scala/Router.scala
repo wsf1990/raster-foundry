@@ -9,6 +9,7 @@ import com.azavea.rf.tile.routes._
 import com.azavea.rf.tile.tool._
 import com.azavea.rf.tile.util.TimingLogging
 import com.typesafe.scalalogging.LazyLogging
+import spire.syntax.cfor._
 
 class Router extends LazyLogging
     with TileAuthentication
@@ -29,7 +30,9 @@ class Router extends LazyLogging
           val result =
             timedCreate("tiles", "Router.scala::30 start", "Router.scala::30 finish") {
               tileAccessAuthorized(projectId) {
-                case true => MosaicRoutes.mosaicProject(projectId)(database)
+                case true => {
+                  MosaicRoutes.mosaicProject(projectId)(database)
+                }
                 case _ => reject(AuthorizationFailedRejection)
               }
             }

@@ -75,16 +75,21 @@ object MosaicRoutes extends LazyLogging with TimingLogging {
 
              val render =
                timedCreate("mosaicProject", "MosaicRoutes::77 start", "MosaicRoutes::77 finish") {
-                 mosaic.map(_.renderPng).getOrElse(emptyTilePng).map(pngAsHttpResponse)
+                 mosaic.map(_.renderPng)
                }
 
-            render
+            val result = render.getOrElse(emptyTilePng).map(pngAsHttpResponse)
+
+            mosaic.value onComplete {
+              case _ => printBuffer("mosaicProject")
+            }
+
+            result
           }
         }
       }
     } }
 
-    printBuffer("mosaicProject")
     res
    }
 
