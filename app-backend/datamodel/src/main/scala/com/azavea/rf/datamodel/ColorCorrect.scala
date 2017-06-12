@@ -320,9 +320,7 @@ object ColorCorrect extends TimingLogging {
 
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
     val maybeEqualize =
-      timedCreate("ColorCorrect", "323::maybeEqualize start", "323::maybeEqualize finish") {
-        if (params.equalize.enabled) Some(HistogramEqualization(_: MultibandTile, rgbHist)) else None
-      }
+        if (params.equalize.enabled) Some({ s: MultibandTile => timedCreate("ColorCorrect", "323::HistogramEqualization start", "323::HistogramEqualization finish") { HistogramEqualization(s, rgbHist) } }) else None
 
     case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax:Int, blueMin: Int, blueMax: Int)
     sealed trait ClipValue
@@ -346,10 +344,9 @@ object ColorCorrect extends TimingLogging {
                         } else { None }
     } yield layerClp).getOrElse(LayerClipping(0, 255, 0, 255, 0, 255)) }
 
-    val rgbBand = timedCreate("ColorCorrect", "349::rgbBand start", "349::rgbBand finish") {
-      (specificBand: Option[Int], allBands: Option[Int], tileDefault: Int) =>
-        specificBand.fold(allBands)(Some(_)).fold(Some(tileDefault))(x => Some(x))
-    }
+    val rgbBand =
+      (specificBand: Option[Int], allBands: Option[Int], tileDefault: Int) => timedCreate("ColorCorrect", "348::rgbBand start", "348::rgbBand finish") {
+        specificBand.fold(allBands)(Some(_)).fold(Some(tileDefault))(x => Some(x)) }
 
     val layerNormalizeArgs = timedCreate("ColorCorrect", "354::layerNormalizeArgs start", "333::layerNormalizeArgs finish") { Some(
       ClippingParams(0, ClipBounds(layerRgbClipping.redMin, layerRgbClipping.redMax))
@@ -367,34 +364,38 @@ object ColorCorrect extends TimingLogging {
 
     val maybeClipBands = timedCreate("ColorCorrect", "368::maybeClipBands start", "368::maybeClipBands finish") {
       (clipParams: Option[List[ClippingParams]]) =>
-        for {
-          clipParams <- clipParams
-        } yield {
-          (_: MultibandTile).mapBands { (i, tile) =>
-            (for {
-              args <- clipParams.find(cp => cp.band == i)
-            } yield {
-              args match {
-                case ClippingParams(_, ClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(None, None, min)
-                    clipMax <- rgbBand(None, None, max)
-                    newMin <- Some(0)
-                    newMax <- Some(255)
-                  } yield {
-                    normalizeAndClamp(tile, clipMin, clipMax, newMin, newMax)
-                  })
-                }
-                case ClippingParams(_, MaybeClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(min, params.tileClipping.min, 0)
-                    clipMax <- rgbBand(max, params.tileClipping.max, 255)
-                  } yield {
-                    clipBands(tile, clipMin, clipMax)
-                  })
-                }
+        timedCreate("ColorCorrect", "367::clipParams start", "367::clipParams finish") {
+          for {
+            clipParams <- clipParams
+          } yield {
+            (_: MultibandTile).mapBands { (i, tile) =>
+              timedCreate("ColorCorrect", "372::mapBand start", "372::mapBand finish") {
+                (for {
+                  args <- clipParams.find(cp => cp.band == i)
+                } yield {
+                  args match {
+                    case ClippingParams(_, ClipBounds(min, max)) => {
+                      (for {
+                        clipMin <- rgbBand(None, None, min)
+                        clipMax <- rgbBand(None, None, max)
+                        newMin <- Some(0)
+                        newMax <- Some(255)
+                      } yield {
+                        timedCreate("ColorCorrect", "384::normalizeAndClamp start", "384::normalizeAndClamp finish") { normalizeAndClamp(tile, clipMin, clipMax, newMin, newMax) }
+                      })
+                    }
+                    case ClippingParams(_, MaybeClipBounds(min, max)) => {
+                      (for {
+                        clipMin <- rgbBand(min, params.tileClipping.min, 0)
+                        clipMax <- rgbBand(max, params.tileClipping.max, 255)
+                      } yield {
+                        timedCreate("ColorCorrect", "392::clipBands start", "392::clipBands finish") { clipBands(tile, clipMin, clipMax) }
+                      })
+                    }
+                  }
+                }).flatten.getOrElse(tile)
               }
-            }).flatten.getOrElse(tile)
+            }
           }
         }
     }
@@ -423,12 +424,12 @@ object ColorCorrect extends TimingLogging {
 
     val maybeSigmoidal = timedCreate("ColorCorrect", "424::maybeSigmoidal start", "424::maybeSigmoidal finish") {
       for (alpha <- params.sigmoidalContrast.alpha; beta <- params.sigmoidalContrast.beta)
-        yield SigmoidalContrast(_: MultibandTile, alpha, beta)
+        yield { s: MultibandTile => timedCreate("ColorCorrect", "427::SigmoidalContrast start", "427::SigmoidalContrast finish") { SigmoidalContrast(s, alpha, beta) } }
     }
 
     val maybeAdjustSaturation = timedCreate("ColorCorrect", "429::maybeAdjustSaturation start", "429::maybeAdjustSaturation finish") {
       for (saturationFactor <- params.saturation.saturation)
-        yield SaturationAdjust(_: MultibandTile, saturationFactor)
+        yield { s: MultibandTile => timedCreate("ColorCorrect", "432::SaturationAdjust start", "432::SaturationAdjust finish") { SaturationAdjust(s, saturationFactor) } }
     }
 
 
