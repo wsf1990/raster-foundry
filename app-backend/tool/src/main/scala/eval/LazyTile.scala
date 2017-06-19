@@ -30,6 +30,11 @@ sealed trait LazyTile extends TileLike with Grid with LazyLogging {
   def map(f: Int => Int): LazyTile.Tree =
     LazyTile.MapInt(this, f)
 
+  def mapIfSet(f: Int => Int): LazyTile.Tree = {
+    val ifSet: Int => Int = z => if(isNoData(z)) z else f(z)
+    LazyTile.MapInt(this, ifSet)
+  }
+
   def mapDouble(f: Double => Double): LazyTile.Tree =
     LazyTile.MapDouble(this, f)
 
