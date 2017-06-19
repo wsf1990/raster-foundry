@@ -16,6 +16,7 @@ import akka.http.scaladsl.server._
 import scala.math._
 import scala.annotation.tailrec
 import com.azavea.rf.datamodel.color._
+import com.azavea.rf.datamodel.util.TimingLogging
 import com.azavea.rf.tool.eval.LazyTile
 import geotrellis.raster._
 import geotrellis.raster.histogram._
@@ -356,7 +357,7 @@ object WhiteBalance {
 
 }
 
-object ColorCorrect {
+object ColorCorrect extends TimingLogging {
   type LazyMultibandTile = Vector[(LazyTile, Int)]
 
   // TODO: Now that each correction is a separate class, it should be possible to refactor this object to place the
@@ -383,8 +384,10 @@ object ColorCorrect {
       (tile.subsetBands(redBand, greenBand, blueBand), Array(hist(redBand), hist(greenBand), hist(blueBand)))
 
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
-      val (rgbTile, rgbHist) = reorderBands(tile, hist)
-      ColorCorrect(rgbTile, rgbHist, this)
+      val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
+      val result = timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") { ColorCorrect(rgbTile, rgbHist, this) }
+      printBuffer("Params")
+      result
     }
   }
 
