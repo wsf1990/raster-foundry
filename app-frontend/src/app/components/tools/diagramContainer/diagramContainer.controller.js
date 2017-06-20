@@ -22,6 +22,9 @@ export default class DiagramContainerController {
 
     $onInit() {
         const element = this.$element[0];
+        element.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
         const shadeNormal = 0x7B8391;
         const white = 0xffffff;
 
@@ -55,7 +58,7 @@ export default class DiagramContainerController {
                 this.beginFill(shadeNormal);
                 this.drawRoundedRect(x + 4, y + 5, width - 4, height - 4, 5);
                 this.endFill();
-                this.filters = [new PIXI.filters.BlurFilter(2, 2, 3, 5)];
+                this.filters = [new PIXI.filters.BlurFilter(2, 1, 3, 5)];
             }
         }
 
@@ -109,21 +112,21 @@ export default class DiagramContainerController {
         });
 
         renderer.render(stage);
+        let oldPosition = {x: 0, y: 0};
 
-        // let velocity = [1, 0];
         let renderLoop = () => {
             requestAnimationFrame(renderLoop.bind());
-            // if (this.node.x > 300) {
-            //     this.node.setPosition(0, 0);
-            // }
-            // this.node.setPosition(this.node.x + velocity[0], this.node.y + velocity[1]);
 
             let mousePosition = renderer.plugins.interaction.mouse.global;
             if (mousePosition.x > 0 && mousePosition.y > 0) {
                 this.node.setPosition(mousePosition.x, mousePosition.y);
             }
 
-            renderer.render(stage);
+            if (oldPosition.x !== mousePosition.x && oldPosition.y !== mousePosition.y) {
+                oldPosition.x = mousePosition.x;
+                oldPosition.y = mousePosition.y;
+                renderer.render(stage);
+            }
         };
 
         renderLoop();
