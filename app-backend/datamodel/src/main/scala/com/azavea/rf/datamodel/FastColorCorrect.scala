@@ -28,6 +28,17 @@ import com.azavea.rf.datamodel.util._
 
 object SigmoidalContrast {
 
+  def pow(a: Double, b: Double): Double = {
+    val tmp = java.lang.Double.doubleToLongBits(a)
+    val tmp2 = (b * (tmp - 4606921280493453312L)).toLong + 4606921280493453312L
+    java.lang.Double.longBitsToDouble(tmp2)
+  }
+
+  def exp(value: Double): Double = {
+    val tmp = (1512775 * value + 1072632447).toLong
+    java.lang.Double.longBitsToDouble(tmp << 32)
+  }
+
   /**
     * @param  cellType   The cell type on which the transform is to act
     * @param  alpha      The center around-which the stretch is performed (given as a fraction)
@@ -49,8 +60,8 @@ object SigmoidalContrast {
         (intensity + (1<<(bits-1))) / ((1<<bits)-1)
     }
 
-    val numer = 1/(1+math.exp(beta*(alpha-u))) - 1/(1+math.exp(beta))
-    val denom = 1/(1+math.exp(beta*(alpha-1))) - 1/(1+math.exp(beta*alpha))
+    val numer = 1/(1+SigmoidalContrast.exp(beta*(alpha-u))) - 1/(1+SigmoidalContrast.exp(beta))
+    val denom = 1/(1+SigmoidalContrast.exp(beta*(alpha-1))) - 1/(1+SigmoidalContrast.exp(beta*alpha))
     val gu = math.max(0.0, math.min(1.0, numer / denom))
 
     cellType match {
@@ -147,21 +158,19 @@ object SaturationAdjust extends TimingLogging {
                             (colorCorrectArgs: Map[Int, MaybeClipBounds], tileClipping: MultiBandClipping): MultibandTile = {
     val (red, green, blue) = (rgbTile.band(0), rgbTile.band(1), rgbTile.band(2))
     val (gr, gg, gb) = (gammas(0), gammas(1), gammas(2))
-    val (nred, ngreen, nblue) = timedCreate("SaturationAdjust", "150::alloc start", "150::alloc finish") {
-      (
-        ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-        ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-        ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows)
-      )
-    }
+    val (nred, ngreen, nblue) = (
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows)
+    )
 
     val ClipBounds(rmin, rmax) = layerNormalizeArgs(0)
     val ClipBounds(gmin, gmax) = layerNormalizeArgs(1)
     val ClipBounds(bmin, bmax) = layerNormalizeArgs(2)
 
-    val (rclipMin, rclipMax, rnewMin, rnewMax) = (rgbBand(None, None, rmin).get, rgbBand(None, None, rmax).get, 0, 255)
-    val (gclipMin, gclipMax, gnewMin, gnewMax) = (rgbBand(None, None, gmin).get, rgbBand(None, None, gmax).get, 0, 255)
-    val (bclipMin, bclipMax, bnewMin, bnewMax) = (rgbBand(None, None, bmin).get, rgbBand(None, None, bmax).get, 0, 255)
+    val (rclipMin, rclipMax, rnewMin, rnewMax) = (rmin, rmax, 0, 255)
+    val (gclipMin, gclipMax, gnewMin, gnewMax) = (gmin, gmax, 0, 255)
+    val (bclipMin, bclipMax, bnewMin, bnewMax) = (bmin, bmax, 0, 255)
 
     val sigmoidal: Double => Double =
       (sigmoidalContrast.alpha, sigmoidalContrast.beta) match {
@@ -192,31 +201,25 @@ object SaturationAdjust extends TimingLogging {
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
           val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
 
-          if(isData(r) && isData(g) && isData(b)) {
-            val (сr, сg, сb) =
-              (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
-                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
-                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
+          val (сr, сg, сb) =
+            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
-            val (nr, ng, nb) = chromaFactor match {
-              case Some(cf) => {
-                val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
-                val newChroma = scaleChroma(chroma, cf)
-                val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-                (nr, ng, nb)
-              }
-
-              case _ => (сr, сg, сb)
+          val (nr, ng, nb) = chromaFactor match {
+            case Some(cf) => {
+              val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
+              val newChroma = scaleChroma(chroma, cf)
+              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+              (nr, ng, nb)
             }
 
-            nred.set(col, row, clipr(sigmoidal(nr).toInt))
-            ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-            nblue.set(col, row, clipb(sigmoidal(nb).toInt))
-          } else {
-            nred.set(col, row, r)
-            ngreen.set(col, row, g)
-            nblue.set(col, row, b)
+            case _ => (сr, сg, сb)
           }
+
+          nred.set(col, row, clipr(sigmoidal(nr).toInt))
+          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
         }
       }
     }
@@ -282,7 +285,7 @@ object SaturationAdjust extends TimingLogging {
   @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
-    val scaled = math.pow(chroma, 1.0 / scaleFactor)
+    val scaled = SigmoidalContrast.pow(chroma, 1.0 / scaleFactor)
     if (scaled < 0.0) 0.0
     else if (scaled > 1.0) 1.0
     else scaled
@@ -518,7 +521,7 @@ object ColorCorrect extends TimingLogging {
         case Some(gamma) => {
           clampColor {
             val gammaCorrection = 1 / gamma
-            (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+            (255 * SigmoidalContrast.pow(v / 255.0, gammaCorrection)).toInt
           }
         }
       }
@@ -536,7 +539,7 @@ object ColorCorrect extends TimingLogging {
         case Some(gamma) => {
           clampColor {
             val gammaCorrection = 1 / gamma
-            (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+            (255 * SigmoidalContrast.pow(v / 255.0, gammaCorrection)).toInt
           }
         }
       }
@@ -649,7 +652,7 @@ object ColorCorrect extends TimingLogging {
     tile.mapIfSet { z =>
       clampColor {
         val gammaCorrection = 1 / gamma
-        (255 * math.pow(z / 255.0, gammaCorrection)).toInt
+        (255 * SigmoidalContrast.pow(z / 255.0, gammaCorrection)).toInt
       }
     }
 }
