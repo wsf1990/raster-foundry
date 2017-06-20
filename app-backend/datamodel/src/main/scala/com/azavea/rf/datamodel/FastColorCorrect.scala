@@ -1,292 +1,21 @@
 package com.azavea.rf.datamodel.fast
 
-import java.io._
-
-import io.circe._
-import io.circe.syntax._
 import io.circe.generic.JsonCodec
-import spire.syntax.cfor._
-import com.azavea.rf.datamodel._
-import geotrellis.raster._
-import geotrellis.raster.crop._
-import geotrellis.raster.equalization.HistogramEqualization
-import geotrellis.raster.histogram.Histogram
-import org.apache.commons.math3.util.FastMath
-//import geotrellis.raster.sigmoidal.SigmoidalContrast
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server._
 
-import scala.math._
-import scala.annotation.tailrec
+import com.azavea.rf.datamodel._
+import com.azavea.rf.datamodel.util._
 import com.azavea.rf.datamodel.color._
 
 import geotrellis.raster._
-import geotrellis.raster.histogram._
-import com.azavea.rf.datamodel.util._
+import geotrellis.raster.equalization.HistogramEqualization
+import geotrellis.raster.histogram.Histogram
 
-import org.apache.commons.math3.analysis.function.Exp
+import spire.syntax.cfor._
+import org.apache.commons.math3.util.{FastMath => math}
 
+import scala.annotation.tailrec
 
-object SigmoidalContrast {
-
-  /**
-    * @param  cellType   The cell type on which the transform is to act
-    * @param  alpha      The center around-which the stretch is performed (given as a fraction)
-    * @param  beta       The standard deviation in the computation, used to avoid saturating the upper and lower parts of the gamut
-    * @param  intensity  The raw intensity value to be mapped-from
-    * @return            The intensity value produced by the sigmoidal contrast transformation
-    */
-  @inline def transform(cellType: CellType, alpha: Double, beta: Double)(intensity: Double): Double = {
-    val bits = cellType.bits
-
-    val u = cellType match {
-      case _: FloatCells =>
-        (intensity - Float.MinValue)/(Float.MaxValue - Float.MinValue)
-      case _: DoubleCells =>
-        (intensity/2 - Double.MinValue/2)/(Double.MaxValue/2 - Double.MinValue/2)
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        (intensity / ((1<<bits)-1))
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        (intensity + (1<<(bits-1))) / ((1<<bits)-1)
-    }
-
-    val numer = 1/(1+FastMath.exp(beta*(alpha-u))) - 1/(1+FastMath.exp(beta))
-    val denom = 1/(1+FastMath.exp(beta*(alpha-1))) - 1/(1+FastMath.exp(beta*alpha))
-    val gu = math.max(0.0, math.min(1.0, numer / denom))
-
-    cellType match {
-      case _: FloatCells =>
-        (Float.MaxValue * (2*gu - 1.0))
-      case _: DoubleCells =>
-        (Double.MaxValue * (2*gu - 1.0))
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        ((1<<bits) - 1) * gu
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        (((1<<bits) - 1) * gu) - (1<<(bits-1))
-    }
-  }
-
-  /**
-    * Given a singleband [[Tile]] object and the parameters alpha and
-    * beta, perform the sigmoidal contrast computation and return the
-    * result as a tile.
-    *
-    * The approach used is described here:
-    * https://www.imagemagick.org/Usage/color_mods/#sigmoidal
-    *
-    * @param  tile   The input tile
-    * @param  alpha  The center around-which the stretch is performed (given as a fraction)
-    * @param  beta   The standard deviation in the computation, used to avoid saturating the upper and lower parts of the gamut
-    * @return        The output tile
-    */
-  def apply(tile: Tile, alpha: Double, beta: Double): Tile = {
-    val localTransform = transform(tile.cellType, alpha, beta)_
-    tile.mapDouble(localTransform)
-  }
-
-  def localTransform(cellType: CellType, alpha: Double, beta: Double) = transform(cellType, alpha, beta)_
-
-  /**
-    * Given a [[MultibandTile]] object and the parameters alpha and
-    * beta, perform the sigmoidal contrast computation on each band
-    * and return the result as a multiband tile.
-    *
-    * The approach used is described here:
-    * https://www.imagemagick.org/Usage/color_mods/#sigmoidal
-    *
-    * @param  tile   The input multibandtile
-    * @param  alpha  The center around-which the stretch is performed (given as a fraction)
-    * @param  beta   The standard deviation in the computation, used to avoid saturating the upper and lower parts of the gamut
-    * @return        The output tile
-    */
-  def apply(tile: MultibandTile, alpha: Double, beta: Double): MultibandTile = {
-    val localTransform = transform(tile.cellType, alpha, beta)_
-    MultibandTile(tile.bands.map(_.mapDouble(localTransform)))
-  }
-
-}
-
-object SaturationAdjust extends TimingLogging {
-  import ColorCorrect._
-
-  def apply(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
-    scaleTileChroma(rgbTile, chromaFactor)
-  }
-
-  def complex(rgbTile: MultibandTile, chromaFactor: Option[Double])
-             (layerNormalizeArgs: Map[Int, ClipBounds], gammas: Map[Int, Option[Double]])
-             (sigmoidalContrast: SigmoidalContrast)
-             (colorCorrectArgs: Map[Int, MaybeClipBounds], tileClipping: MultiBandClipping): MultibandTile = {
-    scaleTileChromaComplex(rgbTile, chromaFactor)(layerNormalizeArgs, gammas)(sigmoidalContrast)(colorCorrectArgs, tileClipping)
-  }
-
-  /* Convert RGB to Hue, Chroma, Luma https://en.wikipedia.org/wiki/HSL_and_HSV#Lightness */
-  def scaleTileChroma(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
-    val (red, green, blue) = (rgbTile.band(0), rgbTile.band(1), rgbTile.band(2))
-    val (nred, ngreen, nblue) = (
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows)
-    )
-    cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
-      cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-        val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
-        val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
-        val newChroma = scaleChroma(chroma, chromaFactor)
-        val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-        nred.set(col, row, nr)
-        ngreen.set(col, row, ng)
-        nblue.set(col, row, nb)
-      }
-    }
-    MultibandTile(nred, ngreen, nblue)
-  }
-
-  def scaleTileChromaComplex(rgbTile: MultibandTile, chromaFactor: Option[Double])
-                            (layerNormalizeArgs: Map[Int, ClipBounds], gammas: Map[Int, Option[Double]])
-                            (sigmoidalContrast: SigmoidalContrast)
-                            (colorCorrectArgs: Map[Int, MaybeClipBounds], tileClipping: MultiBandClipping): MultibandTile = {
-    val (red, green, blue) = (rgbTile.band(0), rgbTile.band(1), rgbTile.band(2))
-    val (gr, gg, gb) = (gammas(0), gammas(1), gammas(2))
-    val (nred, ngreen, nblue) = (
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
-      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows)
-    )
-
-    val ClipBounds(rmin, rmax) = layerNormalizeArgs(0)
-    val ClipBounds(gmin, gmax) = layerNormalizeArgs(1)
-    val ClipBounds(bmin, bmax) = layerNormalizeArgs(2)
-
-    val (rclipMin, rclipMax, rnewMin, rnewMax) = (rmin, rmax, 0, 255)
-    val (gclipMin, gclipMax, gnewMin, gnewMax) = (gmin, gmax, 0, 255)
-    val (bclipMin, bclipMax, bnewMin, bnewMax) = (bmin, bmax, 0, 255)
-
-    val sigmoidal: Double => Double =
-      (sigmoidalContrast.alpha, sigmoidalContrast.beta) match {
-        case (Some(a), Some(b)) => SigmoidalContrast.localTransform(rgbTile.cellType, a, b)
-        case _ => identity
-      }
-
-    val (clipr, clipg, clipb): (Int => Int, Int => Int, Int => Int) = {
-      val MaybeClipBounds(mrmin, mrmax) = colorCorrectArgs(0)
-      val MaybeClipBounds(mgmin, mgmax) = colorCorrectArgs(1)
-      val MaybeClipBounds(mbmin, mbmax) = colorCorrectArgs(2)
-
-      val (mrclipMin, mrclipMax) = (rgbBand(mrmin, tileClipping.min, 0).get, rgbBand(mrmax, tileClipping.max, 255).get)
-      val (mgclipMin, mgclipMax) = (rgbBand(mgmin, tileClipping.min, 0).get, rgbBand(mgmax, tileClipping.max, 255).get)
-      val (mbclipMin, mbclipMax) = (rgbBand(mbmin, tileClipping.min, 0).get, rgbBand(mbmax, tileClipping.max, 255).get)
-
-      @inline def clipBands(z: Int, min: Int, max: Int): Int = {
-        if (isData(z) && z > max) 255
-        else if (isData(z) && z < min) 0
-        else z
-      }
-
-      (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
-    }
-
-    timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
-      cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
-        cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-          val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
-
-          val (сr, сg, сb) =
-            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
-
-          val (nr, ng, nb) = chromaFactor match {
-            case Some(cf) => {
-              val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
-              val newChroma = scaleChroma(chroma, cf)
-              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-              (nr, ng, nb)
-            }
-
-            case _ => (сr, сg, сb)
-          }
-
-          nred.set(col, row, clipr(sigmoidal(nr).toInt))
-          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
-        }
-      }
-    }
-
-    printBuffer("SaturationAdjust")
-    MultibandTile(nred, ngreen, nblue)
-  }
-
-  // See link for a detailed explanation of what is happening. Basically we are taking the
-  // RGB cube and tilting it on its side so that the black -> white line runs vertically
-  // up the center of the HCL cylinder, then flattening the cube down into a hexagon and then
-  // pretending that that hexagon is actually a cylinder.
-  // https://en.wikipedia.org/wiki/HSL_and_HSV#Lightness
-  @inline def RGBToHCLuma(rByte: Int, gByte: Int, bByte: Int): (Double, Double, Double) = {
-    // RGB come in as unsigned Bytes, but the transformation requires Doubles [0,1]
-    val (r, g, b) = (rByte / 255.0, gByte / 255.0, bByte / 255.0)
-    val colors = List(r, g, b)
-    val max = colors.max
-    val min = colors.min
-    val chroma = max - min
-    val hueSextant = ((chroma, max) match {
-      case (0, _) => 0 // Technically, undefined, but we'll ignore this value in this case.
-      case (_, x) if x == r => ((g - b) / chroma) % 6
-      case (_, x) if x == g => ((b - r) / chroma) + 2
-      case (_, x) if x == b => ((r - g) / chroma) + 4
-    })
-    // Wrap degrees
-    val hue = ((hueSextant * 60.0) % 360) match {
-      case h if h < 0 => h + 360
-      case h if h >= 0 => h
-    }
-    // Perceptually weighted average of "lightness" contribution of sRGB primaries (it's
-    // not clear that we're in sRGB here, but that's the default for most images intended for
-    // display so it's a good guess in the absence of explicit information).
-    val luma = 0.21*r + 0.72*g + 0.07*b
-    (hue, chroma, luma)
-  }
-
-  // Reverse the process above
-  @inline def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
-    val sextant = hue / 60.0
-    val X = chroma * (1 - Math.abs((sextant % 2) - 1))
-    // Projected color values, i.e., on the flat projection of the RGB cube
-    val (rFlat:Double, gFlat:Double, bFlat:Double) = ((chroma, sextant) match {
-      case (0.0, _) => (0.0, 0.0, 0.0) // Gray (or black / white)
-      case (_, s) if 0 <= s && s < 1 => (chroma, X, 0.0)
-      case (_, s) if 1 <= s && s < 2 => (X, chroma, 0.0)
-      case (_, s) if 2 <= s && s < 3 => (0.0, chroma, X)
-      case (_, s) if 3 <= s && s < 4 => (0.0, X, chroma)
-      case (_, s) if 4 <= s && s < 5 => (X, 0.0, chroma)
-      case (_, s) if 5 <= s && s < 6 => (chroma, 0.0, X)
-    })
-
-    // We can add the same value to each component to move straight up the cylinder from the projected
-    // plane, back to the correct lightness value.
-    val lumaCorrection = luma - (0.21*rFlat + 0.72*gFlat + 0.07*bFlat)
-    val r = clamp8Bit((255 * (rFlat + lumaCorrection)).toInt)
-    val g = clamp8Bit((255 * (gFlat + lumaCorrection)).toInt)
-    val b = clamp8Bit((255 * (bFlat + lumaCorrection)).toInt)
-    (r, g, b)
-  }
-
-  @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
-    // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
-    // a Double in the range [0.0, 2.0].
-    val scaled = FastMath.pow(chroma, 1.0 / scaleFactor)
-    if (scaled < 0.0) 0.0
-    else if (scaled > 1.0) 1.0
-    else scaled
-  }
-
-  @inline def clamp8Bit(z: Int): Int = {
-    if (z < 0) 0
-    else if (z > 255) 255
-    else z
-  }
-}
+import java.io._
 
 case class Memo[I <% K, K, O](f: I => O) extends (I => O) {
   import collection.mutable.{Map => Dict}
@@ -410,7 +139,7 @@ object WhiteBalance {
       })
       
       // find grey chromaticity
-      val offGrey = (yuv:YUV) => (abs(yuv.u) + abs(yuv.v)) / yuv.y
+      val offGrey = (yuv:YUV) => (math.abs(yuv.u) + math.abs(yuv.v)) / yuv.y
       val greys = tileYuv.map(lst => lst.map(yuv => {
         for {
           y <- yuv
@@ -435,14 +164,14 @@ object WhiteBalance {
       })).flatten.sum / greys.length
 
       // adjust red & blue channels if convergence hasn't been reached
-      val err = if (abs(uBar) > abs(vBar)) uBar else vBar
+      val err = if (math.abs(uBar) > math.abs(vBar)) uBar else vBar
       val gainVal = (err match {
         case x if x < balanceParams.convergenceThreshold => 0
-        case x if x > (balanceParams.doubleStepThreshold * 1) => 2 * balanceParams.gainIncr * signum(err)
+        case x if x > (balanceParams.doubleStepThreshold * 1) => 2 * balanceParams.gainIncr * math.signum(err)
         case _ => balanceParams.gainIncr * err
       })
 
-      val channelGain = if (abs(vBar) > abs(uBar)) List((1 - gainVal), 1, 1) else List(1, 1, (1 - gainVal))
+      val channelGain = if (math.abs(vBar) > math.abs(uBar)) List((1 - gainVal), 1, 1) else List(1, 1, (1 - gainVal))
       val newAdjustments = (adjustments._1 * channelGain(0), adjustments._2 * channelGain(1), adjustments._3 * channelGain(2))
 
       val balancedTile = MultibandTile(
@@ -457,6 +186,9 @@ object WhiteBalance {
 }
 
 object ColorCorrect extends TimingLogging {
+  import functions.SaturationAdjust._
+  import functions.SigmoidalContrast._
+
   case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax: Int, blueMin: Int, blueMax: Int)
   sealed trait ClipValue
   case class ClipBounds(min: Int, max: Int) extends ClipValue
@@ -512,7 +244,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -530,7 +262,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -541,6 +273,80 @@ object ColorCorrect extends TimingLogging {
   val rgbBand =
     (specificBand: Option[Int], allBands: Option[Int], tileDefault: Int) =>
       specificBand.fold(allBands)(Some(_)).fold(Some(tileDefault))(x => Some(x))
+
+  def complexColorCorrect(rgbTile: MultibandTile, chromaFactor: Option[Double])
+                         (layerNormalizeArgs: Map[Int, ClipBounds], gammas: Map[Int, Option[Double]])
+                         (sigmoidalContrast: SigmoidalContrast)
+                         (colorCorrectArgs: Map[Int, MaybeClipBounds], tileClipping: MultiBandClipping): MultibandTile = {
+    val (red, green, blue) = (rgbTile.band(0), rgbTile.band(1), rgbTile.band(2))
+    val (gr, gg, gb) = (gammas(0), gammas(1), gammas(2))
+    val (nred, ngreen, nblue) = (
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows),
+      ArrayTile.alloc(rgbTile.cellType, rgbTile.cols, rgbTile.rows)
+    )
+
+    val ClipBounds(rmin, rmax) = layerNormalizeArgs(0)
+    val ClipBounds(gmin, gmax) = layerNormalizeArgs(1)
+    val ClipBounds(bmin, bmax) = layerNormalizeArgs(2)
+
+    val (rclipMin, rclipMax, rnewMin, rnewMax) = (rmin, rmax, 0, 255)
+    val (gclipMin, gclipMax, gnewMin, gnewMax) = (gmin, gmax, 0, 255)
+    val (bclipMin, bclipMax, bnewMin, bnewMax) = (bmin, bmax, 0, 255)
+
+    val sigmoidal: Double => Double =
+      (sigmoidalContrast.alpha, sigmoidalContrast.beta) match {
+        case (Some(a), Some(b)) => localTransform(rgbTile.cellType, a, b)
+        case _ => identity
+      }
+
+    val (clipr, clipg, clipb): (Int => Int, Int => Int, Int => Int) = {
+      val MaybeClipBounds(mrmin, mrmax) = colorCorrectArgs(0)
+      val MaybeClipBounds(mgmin, mgmax) = colorCorrectArgs(1)
+      val MaybeClipBounds(mbmin, mbmax) = colorCorrectArgs(2)
+
+      val (mrclipMin, mrclipMax) = (rgbBand(mrmin, tileClipping.min, 0).get, rgbBand(mrmax, tileClipping.max, 255).get)
+      val (mgclipMin, mgclipMax) = (rgbBand(mgmin, tileClipping.min, 0).get, rgbBand(mgmax, tileClipping.max, 255).get)
+      val (mbclipMin, mbclipMax) = (rgbBand(mbmin, tileClipping.min, 0).get, rgbBand(mbmax, tileClipping.max, 255).get)
+
+      @inline def clipBands(z: Int, min: Int, max: Int): Int = {
+        if (isData(z) && z > max) 255
+        else if (isData(z) && z < min) 0
+        else z
+      }
+
+      (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
+    }
+
+    timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
+      cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
+        cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
+          val (r, g, b) =
+            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
+
+          val (nr, ng, nb) = chromaFactor match {
+            case Some(cf) => {
+              val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
+              val newChroma = scaleChroma(chroma, cf)
+              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+              (nr, ng, nb)
+            }
+
+            case _ => (r, g, b)
+          }
+
+          nred.set(col, row, clipr(sigmoidal(nr).toInt))
+          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
+        }
+      }
+    }
+
+    printBuffer("SaturationAdjust")
+    MultibandTile(nred, ngreen, nblue)
+  }
 
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
     var _rgbTile = rgbTile
@@ -587,7 +393,7 @@ object ColorCorrect extends TimingLogging {
 
 
     _rgbTile = timedCreate("FastColorCorrect", "579::SaturationAdjust.complex start", "579::SaturationAdjust.complex finish") {
-      SaturationAdjust.complex(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
+      complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
     }
 
     printBuffer("FastColorCorrect")
@@ -644,7 +450,7 @@ object ColorCorrect extends TimingLogging {
     tile.mapIfSet { z =>
       clampColor {
         val gammaCorrection = 1 / gamma
-        (255 * FastMath.pow(z / 255.0, gammaCorrection)).toInt
+        (255 * math.pow(z / 255.0, gammaCorrection)).toInt
       }
     }
 }
