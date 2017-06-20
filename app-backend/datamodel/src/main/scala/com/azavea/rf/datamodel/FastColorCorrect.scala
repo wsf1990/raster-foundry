@@ -190,13 +190,12 @@ object SaturationAdjust extends TimingLogging {
     timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-          val (r, g, b) = timedCreate("SaturationAdjust", "193::rgb start", "193::b finish") {
+          val (r, g, b) =
             (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
               ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
               ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
-          }
 
-          val (nr, ng, nb) = timedCreate("SaturationAdjust", "197::nrngnb start", "197::nrngnb finish") { chromaFactor match {
+          val (nr, ng, nb) = chromaFactor match {
             case Some(cf) => {
               val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
               val newChroma = scaleChroma(chroma, cf)
@@ -205,19 +204,11 @@ object SaturationAdjust extends TimingLogging {
             }
 
             case _ => (r, g, b)
-          } }
+          }
 
-          val sigmaRed = timedCreate("SaturationAdjust", "210::sigmaRed start", "210::sigmaRed finish") { sigmoidal(nr.toDouble).toInt }
-          val sigmaGreen = timedCreate("SaturationAdjust", "211::sigmaGreen start", "211::sigmaGreen finish") { sigmoidal(ng.toDouble).toInt }
-          val sigmaBlue = timedCreate("SaturationAdjust", "212::sigmaBlue start", "212::sigmaBlue finish") { sigmoidal(nb.toDouble).toInt }
-
-          val clipsRed = timedCreate("SaturationAdjust", "214::clipr start", "214::clipr finish") { clipr(sigmaRed) }
-          val clipsGreen = timedCreate("SaturationAdjust", "215::clipg start", "215::clipg finish") { clipg(sigmaGreen) }
-          val clipsBlue = timedCreate("SaturationAdjust", "216::clipb start", "216::clipb finish") { clipb(sigmaBlue) }
-
-          nred.set(col, row, clipsRed)
-          ngreen.set(col, row, clipsGreen)
-          nblue.set(col, row, clipsBlue)
+          nred.set(col, row, clipr(sigmoidal(nr.toDouble).toInt))
+          ngreen.set(col, row, clipg(sigmoidal(ng.toDouble).toInt))
+          nblue.set(col, row, clipb(sigmoidal(nb.toDouble).toInt))
         }
       }
     }
