@@ -199,27 +199,34 @@ object SaturationAdjust extends TimingLogging {
     timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
+
           val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
 
-          val (сr, сg, сb) =
-            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
+          if (isData(r) && isData(g) && isData(b)) {
+            val (сr, сg, сb) =
+              (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
+                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
+                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
-          val (nr, ng, nb) = chromaFactor match {
-            case Some(cf) => {
-              val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
-              val newChroma = scaleChroma(chroma, cf)
-              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-              (nr, ng, nb)
+            val (nr, ng, nb) = chromaFactor match {
+              case Some(cf) => {
+                val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
+                val newChroma = scaleChroma(chroma, cf)
+                val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+                (nr, ng, nb)
+              }
+
+              case _ => (сr, сg, сb)
             }
 
-            case _ => (сr, сg, сb)
+            nred.set(col, row, clipr(sigmoidal(nr).toInt))
+            ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+            nblue.set(col, row, clipb(sigmoidal(nb).toInt))
+          } else {
+            nred.set(col, row, r)
+            ngreen.set(col, row, g)
+            nblue.set(col, row, b)
           }
-
-          nred.set(col, row, clipr(sigmoidal(nr).toInt))
-          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
         }
       }
     }
