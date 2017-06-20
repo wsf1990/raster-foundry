@@ -35,7 +35,7 @@ object SigmoidalContrast {
     * @param  intensity  The raw intensity value to be mapped-from
     * @return            The intensity value produced by the sigmoidal contrast transformation
     */
-  def transform(cellType: CellType, alpha: Double, beta: Double)(intensity: Double): Double = {
+  @inline def transform(cellType: CellType, alpha: Double, beta: Double)(intensity: Double): Double = {
     val bits = cellType.bits
 
     val u = cellType match {
@@ -178,7 +178,7 @@ object SaturationAdjust extends TimingLogging {
       val (mgclipMin, mgclipMax) = (rgbBand(mgmin, tileClipping.min, 0).get, rgbBand(mgmax, tileClipping.max, 255).get)
       val (mbclipMin, mbclipMax) = (rgbBand(mbmin, tileClipping.min, 0).get, rgbBand(mbmax, tileClipping.max, 255).get)
 
-      def clipBands(z: Int, min: Int, max: Int): Int = {
+      @inline def clipBands(z: Int, min: Int, max: Int): Int = {
         if (z > max) 255
         else if (z < min) 0
         else z
@@ -190,29 +190,33 @@ object SaturationAdjust extends TimingLogging {
     timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-          val (r, g, b) =
-            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
+          val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
 
-          val (nr, ng, nb) = chromaFactor match {
-            case Some(cf) => {
-              val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
-              val newChroma = scaleChroma(chroma, cf)
-              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-              (nr, ng, nb)
+          if(isData(r) && isData(g) && isData(b)) {
+            val (сr, сg, сb) =
+              (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
+                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
+                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
+
+            val (nr, ng, nb) = chromaFactor match {
+              case Some(cf) => {
+                val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
+                val newChroma = scaleChroma(chroma, cf)
+                val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+                (nr, ng, nb)
+              }
+
+              case _ => (сr, сg, сb)
             }
 
-            case _ => (r, g, b)
+            nred.set(col, row, clipr(sigmoidal(nr).toInt))
+            ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+            nblue.set(col, row, clipb(sigmoidal(nb).toInt))
+          } else {
+            nred.set(col, row, r)
+            ngreen.set(col, row, g)
+            nblue.set(col, row, b)
           }
-
-          //nred.set(col, row, clipr(sigmoidal(nr.toDouble).toInt))
-          //ngreen.set(col, row, clipg(sigmoidal(ng.toDouble).toInt))
-          //nblue.set(col, row, clipb(sigmoidal(nb.toDouble).toInt))
-
-          nred.set(col, row, nr)
-          ngreen.set(col, row, ng)
-          nblue.set(col, row, nb)
         }
       }
     }
@@ -226,7 +230,7 @@ object SaturationAdjust extends TimingLogging {
   // up the center of the HCL cylinder, then flattening the cube down into a hexagon and then
   // pretending that that hexagon is actually a cylinder.
   // https://en.wikipedia.org/wiki/HSL_and_HSV#Lightness
-  def RGBToHCLuma(rByte: Int, gByte: Int, bByte: Int): (Double, Double, Double) = {
+  @inline def RGBToHCLuma(rByte: Int, gByte: Int, bByte: Int): (Double, Double, Double) = {
     // RGB come in as unsigned Bytes, but the transformation requires Doubles [0,1]
     val (r, g, b) = (rByte / 255.0, gByte / 255.0, bByte / 255.0)
     val colors = List(r, g, b)
@@ -235,9 +239,9 @@ object SaturationAdjust extends TimingLogging {
     val chroma = max - min
     val hueSextant = ((chroma, max) match {
       case (0, _) => 0 // Technically, undefined, but we'll ignore this value in this case.
-      case (_, x) if x == r => ((g - b) / chroma.toDouble) % 6
-      case (_, x) if x == g => ((b - r) / chroma.toDouble) + 2
-      case (_, x) if x == b => ((r - g) / chroma.toDouble) + 4
+      case (_, x) if x == r => ((g - b) / chroma) % 6
+      case (_, x) if x == g => ((b - r) / chroma) + 2
+      case (_, x) if x == b => ((r - g) / chroma) + 4
     })
     // Wrap degrees
     val hue = ((hueSextant * 60.0) % 360) match {
@@ -252,7 +256,7 @@ object SaturationAdjust extends TimingLogging {
   }
 
   // Reverse the process above
-  def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
+  @inline def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
     val sextant = hue / 60.0
     val X = chroma * (1 - Math.abs((sextant % 2) - 1))
     // Projected color values, i.e., on the flat projection of the RGB cube
@@ -275,7 +279,7 @@ object SaturationAdjust extends TimingLogging {
     (r, g, b)
   }
 
-  def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
+  @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
     val scaled = math.pow(chroma, 1.0 / scaleFactor)
@@ -497,7 +501,7 @@ object ColorCorrect extends TimingLogging {
     }
   }
 
-  def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
+  @inline def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
     val dNew = newMax - newMin
     val dOld = oldMax - oldMin
 
