@@ -206,9 +206,13 @@ object SaturationAdjust extends TimingLogging {
             case _ => (r, g, b)
           }
 
-          nred.set(col, row, clipr(sigmoidal(nr.toDouble).toInt))
-          ngreen.set(col, row, clipg(sigmoidal(ng.toDouble).toInt))
-          nblue.set(col, row, clipb(sigmoidal(nb.toDouble).toInt))
+          //nred.set(col, row, clipr(sigmoidal(nr.toDouble).toInt))
+          //ngreen.set(col, row, clipg(sigmoidal(ng.toDouble).toInt))
+          //nblue.set(col, row, clipb(sigmoidal(nb.toDouble).toInt))
+
+          nred.set(col, row, r)
+          ngreen.set(col, row, g)
+          nblue.set(col, row, b)
         }
       }
     }
