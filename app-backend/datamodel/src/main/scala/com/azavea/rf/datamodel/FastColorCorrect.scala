@@ -29,17 +29,6 @@ import org.apache.commons.math3.analysis.function.Exp
 
 object SigmoidalContrast {
 
-  def pow(a: Double, b: Double): Double = {
-    val tmp = java.lang.Double.doubleToLongBits(a)
-    val tmp2 = (b * (tmp - 4606921280493453312L)).toLong + 4606921280493453312L
-    java.lang.Double.longBitsToDouble(tmp2)
-  }
-
-  def exp(value: Double): Double = {
-    val tmp = (1512775 * value + 1072632447).toLong
-    java.lang.Double.longBitsToDouble(tmp << 32)
-  }
-
   /**
     * @param  cellType   The cell type on which the transform is to act
     * @param  alpha      The center around-which the stretch is performed (given as a fraction)
@@ -189,8 +178,8 @@ object SaturationAdjust extends TimingLogging {
       val (mbclipMin, mbclipMax) = (rgbBand(mbmin, tileClipping.min, 0).get, rgbBand(mbmax, tileClipping.max, 255).get)
 
       @inline def clipBands(z: Int, min: Int, max: Int): Int = {
-        if (z > max) 255
-        else if (z < min) 0
+        if (isData(z) && z > max) 255
+        else if (isData(z) && z < min) 0
         else z
       }
 
@@ -200,34 +189,27 @@ object SaturationAdjust extends TimingLogging {
     timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-
           val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
 
-          if (isData(r) && isData(g) && isData(b)) {
-            val (сr, сg, сb) =
-              (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
-                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
-                ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
+          val (сr, сg, сb) =
+            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(r, rclipMin, rclipMax, rnewMin, rnewMax, gr),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(g, gclipMin, gclipMax, gnewMin, gnewMax, gg),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(b, bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
-            val (nr, ng, nb) = chromaFactor match {
-              case Some(cf) => {
-                val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
-                val newChroma = scaleChroma(chroma, cf)
-                val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-                (nr, ng, nb)
-              }
-
-              case _ => (сr, сg, сb)
+          val (nr, ng, nb) = chromaFactor match {
+            case Some(cf) => {
+              val (hue, chroma, luma) = RGBToHCLuma(сr, сg, сb)
+              val newChroma = scaleChroma(chroma, cf)
+              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+              (nr, ng, nb)
             }
 
-            nred.set(col, row, clipr(sigmoidal(nr).toInt))
-            ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-            nblue.set(col, row, clipb(sigmoidal(nb).toInt))
-          } else {
-            nred.set(col, row, r)
-            ngreen.set(col, row, g)
-            nblue.set(col, row, b)
+            case _ => (сr, сg, сb)
           }
+
+          nred.set(col, row, clipr(sigmoidal(nr).toInt))
+          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
         }
       }
     }
@@ -513,45 +495,47 @@ object ColorCorrect extends TimingLogging {
   }
 
   @inline def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
-    val dNew = newMax - newMin
-    val dOld = oldMax - oldMin
+    if(isData(z)) {
+      val dNew = newMax - newMin
+      val dOld = oldMax - oldMin
 
-    // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
-    if (dOld == 0) {
-      val v = {
-        if (z > newMax) newMax
-        else if (z < newMin) newMin
-        else z
-      }
+      // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
+      if (dOld == 0) {
+        val v = {
+          if (z > newMax) newMax
+          else if (z < newMin) newMin
+          else z
+        }
 
-      gammaOpt match {
-        case None => v
-        case Some(gamma) => {
-          clampColor {
-            val gammaCorrection = 1 / gamma
-            (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+        gammaOpt match {
+          case None => v
+          case Some(gamma) => {
+            clampColor {
+              val gammaCorrection = 1 / gamma
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+            }
+          }
+        }
+      } else {
+        val v = {
+          val scaled = (((z - oldMin) * dNew) / dOld) + newMin
+
+          if (scaled > newMax) newMax
+          else if (scaled < newMin) newMin
+          else scaled
+        }
+
+        gammaOpt match {
+          case None => v
+          case Some(gamma) => {
+            clampColor {
+              val gammaCorrection = 1 / gamma
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+            }
           }
         }
       }
-    } else {
-      val v = {
-        val scaled = (((z - oldMin) * dNew) / dOld) + newMin
-
-        if (scaled > newMax) newMax
-        else if (scaled < newMin) newMin
-        else scaled
-      }
-
-      gammaOpt match {
-        case None => v
-        case Some(gamma) => {
-          clampColor {
-            val gammaCorrection = 1 / gamma
-            (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
-          }
-        }
-      }
-    }
+    } else z
   }
 
   val rgbBand =
