@@ -50,8 +50,8 @@ object SigmoidalContrast {
         (intensity + (1<<(bits-1))) / ((1<<bits)-1)
     }
 
-    val numer = 1/(1+FastMath.exp(beta*(alpha-u))) - 1/(1+FastMath.exp(beta))
-    val denom = 1/(1+FastMath.exp(beta*(alpha-1))) - 1/(1+FastMath.exp(beta*alpha))
+    val numer = 1/(1+ColorCorrect.exp(beta*(alpha-u))) - 1/(1+ColorCorrect.exp(beta))
+    val denom = 1/(1+ColorCorrect.exp(beta*(alpha-1))) - 1/(1+ColorCorrect.exp(beta*alpha))
     val gu = math.max(0.0, math.min(1.0, numer / denom))
 
     cellType match {
@@ -275,7 +275,7 @@ object SaturationAdjust extends TimingLogging {
   @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
-    val scaled = FastMath.pow(chroma, 1.0 / scaleFactor)
+    val scaled = ColorCorrect.pow(chroma, 1.0 / scaleFactor)
     if (scaled < 0.0) 0.0
     else if (scaled > 1.0) 1.0
     else scaled
@@ -512,7 +512,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * ColorCorrect.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -530,7 +530,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * ColorCorrect.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -644,7 +644,18 @@ object ColorCorrect extends TimingLogging {
     tile.mapIfSet { z =>
       clampColor {
         val gammaCorrection = 1 / gamma
-        (255 * FastMath.pow(z / 255.0, gammaCorrection)).toInt
+        (255 * ColorCorrect.pow(z / 255.0, gammaCorrection)).toInt
       }
     }
+
+  @inline def pow(a: Double, b: Double): Double = {
+    val tmp = java.lang.Double.doubleToLongBits(a)
+    val tmp2 = (b * (tmp - 4606921280493453312L)).toLong + 4606921280493453312L
+    java.lang.Double.longBitsToDouble(tmp2)
+  }
+
+  @inline def exp(value: Double): Double = {
+    val tmp = (1512775 * value + 1072632447).toLong
+    java.lang.Double.longBitsToDouble(tmp << 32)
+  }
 }
