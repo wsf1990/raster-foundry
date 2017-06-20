@@ -196,12 +196,12 @@ object SaturationAdjust extends TimingLogging {
               ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
           val (nr, ng, nb) = chromaFactor match {
-            case Some(cf) => {
+            /*case Some(cf) => {
               val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
               val newChroma = scaleChroma(chroma, cf)
               val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
               (nr, ng, nb)
-            }
+            }*/
 
             case _ => (r, g, b)
           }
