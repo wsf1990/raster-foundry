@@ -23,6 +23,7 @@ import com.azavea.rf.datamodel.color._
 
 import geotrellis.raster._
 import geotrellis.raster.histogram._
+import com.azavea.rf.datamodel.util._
 
 
 object SigmoidalContrast {
@@ -447,7 +448,7 @@ object WhiteBalance {
 
 }
 
-object ColorCorrect {
+object ColorCorrect extends TimingLogging {
   case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax: Int, blueMin: Int, blueMax: Int)
   sealed trait ClipValue
   case class ClipBounds(min: Int, max: Int) extends ClipValue
@@ -534,51 +535,11 @@ object ColorCorrect {
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
     var _rgbTile = rgbTile
     val gammas = params.getGamma
-    if (params.equalize.enabled) _rgbTile = HistogramEqualization(rgbTile, rgbHist)
-
-    def normalizeAndClampAndGammaCorrect(tile: Tile, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Tile = {
-      val dNew = newMax - newMin
-      val dOld = oldMax - oldMin
-
-      // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
-      if (dOld == 0) tile.mapIfSet { z =>
-        val v = {
-          if (z > newMax) newMax
-          else if (z < newMin) newMin
-          else z
-        }
-
-        gammaOpt match {
-          case None => v
-          case Some(gamma) => {
-            clampColor {
-              val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
-            }
-          }
-        }
-      } else tile.mapIfSet { z =>
-        val v = {
-          val scaled = (((z - oldMin) * dNew) / dOld) + newMin
-
-          if (scaled > newMax) newMax
-          else if (scaled < newMin) newMin
-          else scaled
-        }
-
-        gammaOpt match {
-          case None => v
-          case Some(gamma) => {
-            clampColor {
-              val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
-            }
-          }
-        }
-      }
+    if (params.equalize.enabled) _rgbTile = timedCreate("FastColorCorrect", "538::HistogramEqualization start", "538::HistogramEqualization finish") {
+      HistogramEqualization(rgbTile, rgbHist)
     }
 
-    val layerRgbClipping = {
+    val layerRgbClipping = timedCreate("FastColorCorrect", "542::layerRgbClipping start", "538::layerRgbClipping finish") {
       val range = 1 until 255
       var isCorrected = true
       val iMaxMin: Array[(Int, Int)] = Array.ofDim(3)
@@ -615,7 +576,11 @@ object ColorCorrect {
     )
 
 
-    _rgbTile = SaturationAdjust.complex(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
+    _rgbTile = timedCreate("FastColorCorrect", "579::SaturationAdjust.complex start", "579::SaturationAdjust.complex finish") {
+      SaturationAdjust.complex(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
+    }
+
+    printBuffer("FastColorCorrect")
 
     _rgbTile
   }
