@@ -1,12 +1,16 @@
-package com.azavea.rf.datamodel
+package com.azavea.rf.datamodel.fast
 
 import java.io._
 
 import io.circe._
 import io.circe.syntax._
 import io.circe.generic.JsonCodec
+
 import spire.syntax.cfor._
-import geotrellis.raster.{MultibandTile, _}
+
+import com.azavea.rf.datamodel._
+import geotrellis.raster._
+import geotrellis.raster.crop._
 import geotrellis.raster.equalization.HistogramEqualization
 import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.sigmoidal.SigmoidalContrast
@@ -16,63 +20,10 @@ import akka.http.scaladsl.server._
 import scala.math._
 import scala.annotation.tailrec
 import com.azavea.rf.datamodel.color._
-import com.azavea.rf.datamodel.util.TimingLogging
-import com.azavea.rf.tool.eval.LazyTile
-import geotrellis.raster._
-import geotrellis.raster.histogram._
-
-
-object SigmoidalContrastLazy {
-
-  private def transform(cellType: CellType, alpha: Double, beta: Double)(intensity: Double): Double = {
-    val bits = cellType.bits
-
-    val u = cellType match {
-      case _: FloatCells =>
-        (intensity - Float.MinValue)/(Float.MaxValue - Float.MinValue)
-      case _: DoubleCells =>
-        (intensity/2 - Double.MinValue/2)/(Double.MaxValue/2 - Double.MinValue/2)
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        (intensity / ((1<<bits)-1))
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        (intensity + (1<<(bits-1))) / ((1<<bits)-1)
-    }
-
-    val numer = 1/(1+math.exp(beta*(alpha-u))) - 1/(1+math.exp(beta))
-    val denom = 1/(1+math.exp(beta*(alpha-1))) - 1/(1+math.exp(beta*alpha))
-    val gu = math.max(0.0, math.min(1.0, numer / denom))
-
-    cellType match {
-      case _: FloatCells =>
-        (Float.MaxValue * (2*gu - 1.0))
-      case _: DoubleCells =>
-        (Double.MaxValue * (2*gu - 1.0))
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        ((1<<bits) - 1) * gu
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        (((1<<bits) - 1) * gu) - (1<<(bits-1))
-    }
-  }
-
-  def apply(tile: LazyTile, cellType: CellType, alpha: Double, beta: Double): LazyTile = {
-    val localTransform = transform(cellType, alpha, beta)_
-    tile.mapDouble(localTransform)
-  }
-
-  def apply(tile: Vector[(LazyTile, Int)], cellType: CellType, alpha: Double, beta: Double): Vector[(LazyTile, Int)] = {
-    val localTransform = transform(cellType, alpha, beta)_
-    tile.map { case (t, i) => t.mapDouble(localTransform) -> i }
-  }
-}
-
 
 object SaturationAdjust {
   def apply(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
     scaleTileChroma(rgbTile, chromaFactor)
-  }
-
-  def apply(rgbTile: Vector[(LazyTile, Int)], cellType: CellType, chromaFactor: Double): Vector[(LazyTile, Int)] = {
-    scaleTileChroma(rgbTile, cellType, chromaFactor)
   }
 
   /* Convert RGB to Hue, Chroma, Luma https://en.wikipedia.org/wiki/HSL_and_HSV#Lightness */
@@ -95,28 +46,6 @@ object SaturationAdjust {
       }
     }
     MultibandTile(nred, ngreen, nblue)
-  }
-
-  def scaleTileChroma(rgbTile: Vector[(LazyTile, Int)], cellType: CellType, chromaFactor: Double): Vector[(LazyTile, Int)] = {
-    val tiles = rgbTile.map(_._1)
-    val (red, green, blue) = (tiles(0), tiles(1), tiles(2))
-    val (nred, ngreen, nblue) = (
-      ArrayTile.alloc(cellType, red.cols, red.rows),
-      ArrayTile.alloc(cellType, red.cols, red.rows),
-      ArrayTile.alloc(cellType, red.cols, red.rows)
-    )
-    cfor(0)(_ < red.cols, _ + 1) { col =>
-      cfor(0)(_ < red.rows, _ + 1) { row =>
-        val (r, g, b) = (red.get(col, row), green.get(col, row), blue.get(col, row))
-        val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
-        val newChroma = scaleChroma(chroma, chromaFactor)
-        val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-        nred.set(col, row, nr)
-        ngreen.set(col, row, ng)
-        nblue.set(col, row, nb)
-      }
-    }
-    Vector(nred, ngreen, nblue).map(LazyTile(_)).zipWithIndex
   }
 
   // See link for a detailed explanation of what is happening. Basically we are taking the
@@ -357,9 +286,7 @@ object WhiteBalance {
 
 }
 
-object ColorCorrect extends TimingLogging {
-  type LazyMultibandTile = Vector[(LazyTile, Int)]
-
+object ColorCorrect {
   // TODO: Now that each correction is a separate class, it should be possible to refactor this object to place the
   // necessary corrections with the classes that enable them. So rather than
   // ```
@@ -380,226 +307,134 @@ object ColorCorrect extends TimingLogging {
     equalize: Equalization,
     autoBalance: AutoWhiteBalance
   ) {
+    def getGamma: Map[Int, Option[Double]] = Map(0 -> gamma.redGamma, 1 -> gamma.greenGamma, 2 -> gamma.blueGamma)
+
     def reorderBands(tile: MultibandTile, hist: Seq[Histogram[Double]]): (MultibandTile, Array[Histogram[Double]]) =
       (tile.subsetBands(redBand, greenBand, blueBand), Array(hist(redBand), hist(greenBand), hist(blueBand)))
 
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
-      val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
-      val result = timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") {
-        fast.ColorCorrect(rgbTile, rgbHist, fast.ColorCorrect.Params(
-          redBand, greenBand, blueBand,
-          gamma, bandClipping, tileClipping,
-          sigmoidalContrast, saturation, equalize,
-          autoBalance
-        ))
-      }
-      printBuffer("Params")
-      result
+      val (rgbTile, rgbHist) = reorderBands(tile, hist)
+      ColorCorrect(rgbTile, rgbHist, this)
     }
   }
 
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
-    val maybeEqualize =
-      if (params.equalize.enabled) Some(HistogramEqualization(_: MultibandTile, rgbHist)) else None
+    var _rgbTile = rgbTile
+    val gammas = params.getGamma
+    if (params.equalize.enabled) _rgbTile = HistogramEqualization(rgbTile, rgbHist)
 
-    val maybeEqualizeLazy: Option[(LazyMultibandTile) => LazyMultibandTile] =
-      if (params.equalize.enabled)
-        Some(tiles => {
-          HistogramEqualization(MultibandTile(tiles.map(_._1.evaluate.get)), rgbHist).bands.map(LazyTile(_)).zipWithIndex
-        })
-      else
-        None
-
-    case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax:Int, blueMin: Int, blueMax: Int)
+    case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax: Int, blueMin: Int, blueMax: Int)
     sealed trait ClipValue
     case class ClipBounds(min: Int, max: Int) extends ClipValue
     case class MaybeClipBounds(maybeMin: Option[Int], maybeMax: Option[Int]) extends ClipValue
     case class ClippingParams(band: Int, bounds: ClipValue)
 
-    val layerRgbClipping = (for {
-      (r :: g :: b :: xs) <- Some(rgbHist.toList)
-      isCorrected   <- Some((r :: g :: b :: Nil).foldLeft(true) {(acc, hst) => (
-                          acc && (hst match {
-                            case x if 1 until 255 contains x.minValue().map(_.toInt).getOrElse(0) => true
-                            case x if 1 until 255 contains x.maxValue().map(_.toInt).getOrElse(255) => true
-                            case _ => false
-                          })
-                        )})
-      layerClp      <- if (!isCorrected) {
-                          val getMin = (hst:Histogram[Double]) => hst.minValue().map(_.toInt).getOrElse(0)
-                          val getMax = (hst:Histogram[Double]) => hst.maxValue().map(_.toInt).getOrElse(255)
-                          Some(LayerClipping(getMin(r), getMax(r), getMin(g), getMax(g), getMin(b), getMax(b)))
-                        } else { None }
-    } yield layerClp).getOrElse(LayerClipping(0, 255, 0, 255, 0, 255))
+    def normalizeAndClampAndGammaCorrect(tile: Tile, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Tile = {
+      val dNew = newMax - newMin
+      val dOld = oldMax - oldMin
+
+      // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
+      if (dOld == 0) tile.mapIfSet { z =>
+        val v = {
+          if (z > newMax) newMax
+          else if (z < newMin) newMin
+          else z
+        }
+
+        gammaOpt match {
+          case None => v
+          case Some(gamma) => {
+            clampColor {
+              val gammaCorrection = 1 / gamma
+              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+            }
+          }
+        }
+      } else tile.mapIfSet { z =>
+        val v = {
+          val scaled = (((z - oldMin) * dNew) / dOld) + newMin
+
+          if (scaled > newMax) newMax
+          else if (scaled < newMin) newMin
+          else scaled
+        }
+
+        gammaOpt match {
+          case None => v
+          case Some(gamma) => {
+            clampColor {
+              val gammaCorrection = 1 / gamma
+              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+            }
+          }
+        }
+      }
+    }
+
+    val layerRgbClipping = {
+      val range = 1 until 255
+      var isCorrected = true
+      val iMaxMin: Array[(Int, Int)] = Array.ofDim(3)
+      cfor(0)(_ < rgbHist.length, _ + 1) { index =>
+        val hst = rgbHist(index)
+        val imin = hst.minValue().map(_.toInt).getOrElse(0)
+        val imax = hst.maxValue().map(_.toInt).getOrElse(255)
+        iMaxMin(index) = (imin, imax)
+        isCorrected &&= {
+          if (range.contains(hst.minValue().map(_.toInt).getOrElse(0))) true
+          else if (range.contains(hst.maxValue().map(_.toInt).getOrElse(255))) true
+          else false
+        }
+      }
+
+      if (!isCorrected) {
+        val (rmin, rmax) = iMaxMin(0)
+        val (gmin, gmax) = iMaxMin(1)
+        val (bmin, bmax) = iMaxMin(2)
+        LayerClipping(rmin, rmax, gmin, gmax, bmin, bmax)
+      } else LayerClipping(0, 255, 0, 255, 0, 255)
+    }
 
     val rgbBand =
-      (specificBand:Option[Int], allBands:Option[Int], tileDefault: Int) =>
+      (specificBand: Option[Int], allBands: Option[Int], tileDefault: Int) =>
         specificBand.fold(allBands)(Some(_)).fold(Some(tileDefault))(x => Some(x))
 
-    val layerNormalizeArgs = Some(
-      ClippingParams(0, ClipBounds(layerRgbClipping.redMin, layerRgbClipping.redMax))
-        :: ClippingParams(1, ClipBounds(layerRgbClipping.greenMin, layerRgbClipping.greenMax))
-        :: ClippingParams(2, ClipBounds(layerRgbClipping.blueMin, layerRgbClipping.blueMax))
-        :: Nil
+    val layerNormalizeArgs = Map(
+      0 -> ClipBounds(layerRgbClipping.redMin, layerRgbClipping.redMax),
+      1 -> ClipBounds(layerRgbClipping.greenMin, layerRgbClipping.greenMax),
+      2 -> ClipBounds(layerRgbClipping.blueMin, layerRgbClipping.blueMax)
     )
 
-    val colorCorrectArgs = Some(
-      ClippingParams(0, MaybeClipBounds(params.bandClipping.redMin, params.bandClipping.redMax))
-        :: ClippingParams(1, MaybeClipBounds(params.bandClipping.greenMin, params.bandClipping.greenMax))
-        :: ClippingParams(2, MaybeClipBounds(params.bandClipping.blueMin, params.bandClipping.blueMax))
-        :: Nil
+    val colorCorrectArgs = Map(
+      0 -> MaybeClipBounds(params.bandClipping.redMin, params.bandClipping.redMax),
+      1 -> MaybeClipBounds(params.bandClipping.greenMin, params.bandClipping.greenMax),
+      2 -> MaybeClipBounds(params.bandClipping.blueMin, params.bandClipping.blueMax)
     )
 
-    val rgbLazyTile: LazyMultibandTile = rgbTile.bands.map(LazyTile(_)).zipWithIndex
+    _rgbTile = _rgbTile.mapBands { (i, tile) => {
+      val ClipBounds(min, max) = layerNormalizeArgs(i)
+      val (clipMin, clipMax, newMin, newMax) = (rgbBand(None, None, min).get, rgbBand(None, None, max).get, 0, 255)
+      normalizeAndClampAndGammaCorrect(tile, clipMin, clipMax, newMin, newMax, gammas(i))
+    } }
 
-    val maybeClipBands =
-      (clipParams:Option[List[ClippingParams]]) =>
-        for {
-          clipParams <- clipParams
-        } yield {
-          (_ :MultibandTile).mapBands { (i, tile) =>
-            (for {
-              args <- clipParams.find(cp => cp.band == i)
-            } yield {
-              args match {
-                case ClippingParams(_, ClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(None, None, min)
-                    clipMax <- rgbBand(None, None, max)
-                    newMin <- Some(0)
-                    newMax <- Some(255)
-                  } yield {
-                    normalizeAndClamp(tile, clipMin, clipMax, newMin, newMax)
-                  })
-                }
-                case ClippingParams(_, MaybeClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(min, params.tileClipping.min, 0)
-                    clipMax <- rgbBand(max, params.tileClipping.max, 255)
-                  } yield {
-                    clipBands(tile, clipMin, clipMax)
-                  })
-                }
-              }
-            }).flatten.getOrElse(tile)
-          }
-        }
+    params.saturation.saturation.foreach { saturation =>
+      _rgbTile = SaturationAdjust(_rgbTile, saturation)
+    }
 
-    val maybeClipBandsLazy: (Option[List[ClippingParams]]) => Option[(LazyMultibandTile) => LazyMultibandTile] =
-      (clipParams:Option[List[ClippingParams]]) =>
-        for {
-          clipParams <- clipParams
-        } yield {
-          (_ : Vector[(LazyTile, Int)]).map { case (tile, i) =>
-            (for {
-              args <- clipParams.find(cp => cp.band == i)
-            } yield {
-              args match {
-                case ClippingParams(_, ClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(None, None, min)
-                    clipMax <- rgbBand(None, None, max)
-                    newMin <- Some(0)
-                    newMax <- Some(255)
-                  } yield {
-                    normalizeAndClampLazy(tile, clipMin, clipMax, newMin, newMax) -> i
-                  })
-                }
-                case ClippingParams(_, MaybeClipBounds(min, max)) => {
-                  (for {
-                    clipMin <- rgbBand(min, params.tileClipping.min, 0)
-                    clipMax <- rgbBand(max, params.tileClipping.max, 255)
-                  } yield {
-                    clipBandsLazy(tile, clipMin, clipMax) -> i
-                  })
-                }
-              }
-            }).flatten.getOrElse(tile -> i)
-          }
-        }
+    (params.sigmoidalContrast.alpha, params.sigmoidalContrast.beta) match {
+      case (Some(alpha), Some(beta)) => _rgbTile = SigmoidalContrast(_rgbTile, alpha, beta)
+      case _ => ()
+    }
 
-    val maybeAdjustGamma =
-      for (c <- params.sigmoidalContrast.alpha)
-        yield (_: MultibandTile).mapBands { (i, tile) =>
-          i match {
-            case 0 => params.gamma.redGamma match {
-              case None => tile
-              case Some(gamma) => gammaCorrect(tile, gamma)
-            }
-            case 1 => params.gamma.greenGamma match {
-              case None => tile
-              case Some(gamma) => gammaCorrect(tile, gamma)
-            }
-            case 2 => params.gamma.blueGamma match {
-              case None => tile
-              case Some(gamma) => gammaCorrect(tile, gamma)
-            }
-            case _ =>
-              sys.error("Too many bands")
-          }
-        }
+    _rgbTile = _rgbTile.mapBands { (i, tile) => {
+      val MaybeClipBounds(min, max) = colorCorrectArgs(i)
+      val (clipMin, clipMax) = (rgbBand(min, params.tileClipping.min, 0).get, rgbBand(max, params.tileClipping.max, 255).get)
+      clipBands(tile, clipMin, clipMax)
+    } }
 
-    val maybeAdjustGammaLazy: Option[(LazyMultibandTile) => LazyMultibandTile] =
-      for (c <- params.sigmoidalContrast.alpha)
-        yield (_: LazyMultibandTile).map { case (tile, i) =>
-          i match {
-            case 0 => params.gamma.redGamma match {
-              case None => tile -> i
-              case Some(gamma) => gammaCorrectLazy(tile, gamma) -> i
-            }
-            case 1 => params.gamma.greenGamma match {
-              case None => tile -> i
-              case Some(gamma) => gammaCorrectLazy(tile, gamma) -> i
-            }
-            case 2 => params.gamma.blueGamma match {
-              case None => tile -> i
-              case Some(gamma) => gammaCorrectLazy(tile, gamma) -> i
-            }
-            case _ =>
-              sys.error("Too many bands")
-          }
-        }
-
-    val maybeSigmoidal =
-      for (alpha <- params.sigmoidalContrast.alpha; beta <- params.sigmoidalContrast.beta)
-        yield SigmoidalContrast(_: MultibandTile, alpha, beta)
-
-    val maybeSigmoidalLazy: Option[(LazyMultibandTile) => LazyMultibandTile] =
-      for (alpha <- params.sigmoidalContrast.alpha; beta <- params.sigmoidalContrast.beta)
-        yield SigmoidalContrastLazy(_: LazyMultibandTile, rgbTile.cellType, alpha, beta)
-
-    val maybeAdjustSaturation =
-      for (saturationFactor <- params.saturation.saturation)
-        yield SaturationAdjust(_: MultibandTile, saturationFactor)
-
-    val maybeAdjustSaturationLazy: Option[(LazyMultibandTile) => LazyMultibandTile] =
-      for (saturationFactor <- params.saturation.saturation)
-        yield SaturationAdjust(_: LazyMultibandTile, rgbTile.cellType, saturationFactor)
-
-
-    // Sequence of transformations to tile, flatten removes None from the list
-    val transformations: List[MultibandTile => MultibandTile] = List(
-      maybeEqualize,
-      maybeClipBands(layerNormalizeArgs),
-      maybeAdjustGamma,
-      maybeAdjustSaturation,
-      maybeSigmoidal,
-      maybeClipBands(colorCorrectArgs)
-    ).flatten
-
-    val lazyTransformations: List[LazyMultibandTile => LazyMultibandTile] = List(
-      maybeEqualizeLazy,
-      maybeClipBandsLazy(layerNormalizeArgs),
-      maybeAdjustGammaLazy,
-      maybeAdjustSaturationLazy,
-      maybeSigmoidalLazy,
-      maybeClipBandsLazy(colorCorrectArgs)
-    ).flatten
-
-    // Apply tile transformations in order from left to right
-    MultibandTile(lazyTransformations.foldLeft(rgbLazyTile) { (t, f) => f(t) }.flatMap(_._1.evaluate))
-    //transformations.foldLeft(rgbTile){ (t, f) => f(t) }
+    _rgbTile
   }
+
 
   @inline def clampColor(z: Int): Int = {
     if (z < 0) 0
@@ -619,37 +454,11 @@ object ColorCorrect extends TimingLogging {
         ((1 << ct.bits) - 1) - (1 << (ct.bits - 1))
     }
 
-  def clipBandsLazy(tile: LazyTile, min: Int, max: Int): LazyTile = {
-    tile.mapIfSet { z =>
-      if (z > max) 255
-      else if (z < min) 0
-      else z
-    }
-  }
-
   def clipBands(tile: Tile, min: Int, max: Int): Tile = {
     tile.mapIfSet { z =>
       if (z > max) 255
       else if (z < min) 0
       else z
-    }
-  }
-
-  def normalizeAndClampLazy(tile: LazyTile, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int): LazyTile = {
-    val dNew = newMax - newMin
-    val dOld = oldMax - oldMin
-
-    // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
-    if (dOld == 0) tile.mapIfSet { z =>
-      if (z > newMax) newMax
-      else if (z < newMin) newMin
-      else z
-    } else tile.mapIfSet { z =>
-      val scaled = (((z - oldMin) * dNew) / dOld) + newMin
-
-      if (scaled > newMax) newMax
-      else if (scaled < newMin) newMin
-      else scaled
     }
   }
 
@@ -670,14 +479,6 @@ object ColorCorrect extends TimingLogging {
       else scaled
     }
   }
-
-  def gammaCorrectLazy(tile: LazyTile, gamma: Double): LazyTile =
-    tile.mapIfSet { z =>
-      clampColor {
-        val gammaCorrection = 1 / gamma
-        (255 * math.pow(z / 255.0, gammaCorrection)).toInt
-      }
-    }
 
   def gammaCorrect(tile: Tile, gamma: Double): Tile =
     tile.mapIfSet { z =>
