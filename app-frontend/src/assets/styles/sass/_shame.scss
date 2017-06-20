@@ -1329,10 +1329,17 @@ nav .btn-group {
 .sidebar-content.with-borders {
     border-top: 1px solid $border-color-default;
 }
+
 .lab-workspace {
     background-color: $off-white !important;
     display: flex;
     flex: 1;
+    overflow: hidden;
+}
+
+.app-wrapper {
+  height: 100%;
+  width: 100%;
 }
 
 .btn-square.really-square {

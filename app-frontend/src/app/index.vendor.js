@@ -25,6 +25,7 @@ import 'angular-messages';
 import 'angular-aria';
 import 'angular-resource';
 import 'leaflet';
+import 'pixi.js';
 import 'svg-pan-zoom';
 import 'jointjs';
 import 'angular-load';

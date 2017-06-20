@@ -184,6 +184,11 @@ module.exports = function (_path) {
                     'expose?L'
                 ]
             }, {
+                test: require.resolve('pixi.js'),
+                loaders: [
+                    'expose?PIXI'
+                ]
+            }, {
                 test: require.resolve('jointjs'),
                 loaders: [
                     'expose?joint'
@@ -226,7 +231,8 @@ module.exports = function (_path) {
             new webpack.ProvidePlugin({
                 $: 'jquery',
                 jQuery: 'jquery',
-                L: 'leaflet'
+                L: 'leaflet',
+                PIXI: 'pixi.js'
             }),
             new webpack.IgnorePlugin(/^\.\/locale$/, /moment$/),
             new webpack.optimize.AggressiveMergingPlugin({
