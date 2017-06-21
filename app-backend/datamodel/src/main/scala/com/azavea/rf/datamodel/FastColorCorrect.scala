@@ -17,7 +17,7 @@ import scala.annotation.tailrec
 
 import java.io._
 
-case class Memo[I <% K, K, O](f: I => O) extends (I => O) {
+case class Memo[I, K, O](f: I => O)(implicit ev: I => K) extends (I => O) {
   import collection.mutable.{Map => Dict}
   type Input = I
   type Key = K
@@ -188,6 +188,7 @@ object WhiteBalance {
 object ColorCorrect extends TimingLogging {
   import functions.SaturationAdjust._
   import functions.SigmoidalContrast._
+  import functions.Approximations
 
   case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax: Int, blueMin: Int, blueMax: Int)
   sealed trait ClipValue
@@ -244,7 +245,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * Approximations.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -262,7 +263,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * Approximations.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -450,7 +451,7 @@ object ColorCorrect extends TimingLogging {
     tile.mapIfSet { z =>
       clampColor {
         val gammaCorrection = 1 / gamma
-        (255 * math.pow(z / 255.0, gammaCorrection)).toInt
+        (255 * Approximations.pow(z / 255.0, gammaCorrection)).toInt
       }
     }
 }

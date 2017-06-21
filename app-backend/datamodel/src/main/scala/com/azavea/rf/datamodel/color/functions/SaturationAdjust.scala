@@ -2,7 +2,6 @@ package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster.{ArrayTile, MultibandTile}
 import spire.syntax.cfor.cfor
-import org.apache.commons.math3.util.{FastMath => math}
 
 object SaturationAdjust {
   def apply(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
@@ -88,7 +87,7 @@ object SaturationAdjust {
   @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
-    val scaled = math.pow(chroma, 1.0 / scaleFactor)
+    val scaled = Approximations.pow(chroma, 1.0 / scaleFactor)
     if (scaled < 0.0) 0.0
     else if (scaled > 1.0) 1.0
     else scaled
