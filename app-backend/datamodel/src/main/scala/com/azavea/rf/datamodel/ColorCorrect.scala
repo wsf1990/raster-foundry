@@ -182,7 +182,7 @@ object ColorCorrect extends TimingLogging {
     val gammas = params.getGamma
     if (params.equalize.enabled) _rgbTile = HistogramEqualization(rgbTile, rgbHist)
 
-    val layerRgbClipping = timedCreate("FastColorCorrect", "542::layerRgbClipping start", "538::layerRgbClipping finish") {
+    val layerRgbClipping = {
       val range = 1 until 255
       var isCorrected = true
       val iMaxMin: Array[(Int, Int)] = Array.ofDim(3)
