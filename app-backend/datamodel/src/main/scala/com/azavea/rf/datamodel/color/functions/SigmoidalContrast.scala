@@ -1,7 +1,7 @@
 package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster._
-import org.apache.commons.math3.util.FastMath
+import org.apache.commons.math4.util.FastMath
 
 object SigmoidalContrast {
   /**
