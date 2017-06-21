@@ -2,7 +2,7 @@ package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster.{ArrayTile, MultibandTile}
 
-import org.apache.commons.math3.util.FastMath
+import org.apache.commons.math4.util.FastMath
 import spire.syntax.cfor.cfor
 
 object SaturationAdjust {

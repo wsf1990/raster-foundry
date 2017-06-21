@@ -11,7 +11,7 @@ import geotrellis.raster.equalization.HistogramEqualization
 import geotrellis.raster.histogram.Histogram
 
 import spire.syntax.cfor._
-import org.apache.commons.math3.util.FastMath
+import org.apache.commons.math4.util.FastMath
 
 import scala.annotation.tailrec
 
