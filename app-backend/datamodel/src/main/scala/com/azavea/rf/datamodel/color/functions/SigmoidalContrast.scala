@@ -1,7 +1,7 @@
 package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster._
-import org.apache.commons.math4.util.{FastMath => math}
+import org.apache.commons.math4.util.FastMath
 
 object SigmoidalContrast {
   /**
@@ -25,8 +25,8 @@ object SigmoidalContrast {
         (intensity + (1 << (bits - 1))) / ((1 << bits) - 1)
     }
 
-    val numer = 1 / (1 + math.exp(beta * (alpha - u))) - 1 / (1 + math.exp(beta))
-    val denom = 1 / (1 + math.exp(beta * (alpha - 1))) - 1 / (1 + math.exp(beta * alpha))
+    val numer = 1 / (1 + FastMath.exp(beta * (alpha - u))) - 1 / (1 + FastMath.exp(beta))
+    val denom = 1 / (1 + FastMath.exp(beta * (alpha - 1))) - 1 / (1 + FastMath.exp(beta * alpha))
     val gu = math.max(0.0, math.min(1.0, numer / denom))
 
     cellType match {
