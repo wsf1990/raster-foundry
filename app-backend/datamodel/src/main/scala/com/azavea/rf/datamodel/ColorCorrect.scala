@@ -217,15 +217,8 @@ object ColorCorrect extends TimingLogging {
       1 -> MaybeClipBounds(params.bandClipping.greenMin, params.bandClipping.greenMax),
       2 -> MaybeClipBounds(params.bandClipping.blueMin, params.bandClipping.blueMax)
     )
-
-
-    _rgbTile = timedCreate("FastColorCorrect", "579::SaturationAdjust.complex start", "579::SaturationAdjust.complex finish") {
-      complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
-    }
-
-    printBuffer("FastColorCorrect")
-
-    _rgbTile
+    
+    complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
   }
 
   @inline def clampColor(z: Int): Int = {
