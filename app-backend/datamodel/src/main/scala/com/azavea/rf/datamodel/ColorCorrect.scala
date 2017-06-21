@@ -55,6 +55,8 @@ object ColorCorrect extends TimingLogging {
     }
   }
 
+  private def lazyWrapper[T](f: => T): T = f
+
   @inline def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
     if(isData(z)) {
       val dNew = newMax - newMin
@@ -147,9 +149,7 @@ object ColorCorrect extends TimingLogging {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
-    // for some reason it works faster
-    def lazyWrapper[T](f: => T): T = f
-
+    // For some reason with this func wrap it works faster ¯\_(ツ)_/¯
     lazyWrapper {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
