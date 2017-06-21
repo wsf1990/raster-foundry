@@ -2,7 +2,7 @@ package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster.{ArrayTile, MultibandTile}
 
-import org.apache.commons.math4.util.FastMath
+import org.apache.commons.math3.util.FastMath
 import spire.syntax.cfor.cfor
 
 object SaturationAdjust {
@@ -37,7 +37,7 @@ object SaturationAdjust {
   // up the center of the HCL cylinder, then flattening the cube down into a hexagon and then
   // pretending that that hexagon is actually a cylinder.
   // https://en.wikipedia.org/wiki/HSL_and_HSV#Lightness
-  @inline def RGBToHCLuma(rByte: Int, gByte: Int, bByte: Int): (Double, Double, Double) = {
+  def RGBToHCLuma(rByte: Int, gByte: Int, bByte: Int): (Double, Double, Double) = {
     // RGB come in as unsigned Bytes, but the transformation requires Doubles [0,1]
     val (r, g, b) = (rByte / 255d, gByte / 255d, bByte / 255d)
     val colors = List(r, g, b)
@@ -63,7 +63,7 @@ object SaturationAdjust {
   }
 
   // Reverse the process above
-  @inline def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
+  def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
     val sextant = hue / 60d
     val X = chroma * (1 - FastMath.abs((sextant % 2) - 1))
     // Projected color values, i.e., on the flat projection of the RGB cube
@@ -86,7 +86,7 @@ object SaturationAdjust {
     (r, g, b)
   }
 
-  @inline def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
+  def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
     val scaled = FastMath.pow(chroma, 1.0 / scaleFactor)
