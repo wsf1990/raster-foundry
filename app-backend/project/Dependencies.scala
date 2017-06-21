@@ -38,6 +38,7 @@ object Dependencies {
   val akkaHttpCors            = "ch.megard"                   %% "akka-http-cors"                    % Version.akkaHttpCors
   val ammoniteOps             = "com.lihaoyi"                 %% "ammonite-ops"                      % Version.ammoniteOps
   val commonsIO               = "commons-io"                   % "commons-io"                        % Version.commonsIO
+  val commonsMath             = "org.apache.commons"           % "commons-math4"                     % Version.commonsMath
   val scopt                   = "com.github.scopt"            %% "scopt"                             % Version.scopt
   val caffeine                = "com.github.ben-manes.caffeine" % "caffeine"                         % Version.caffeine
   val scaffeine               = "com.github.blemale"          %% "scaffeine"                         % Version.scaffeine

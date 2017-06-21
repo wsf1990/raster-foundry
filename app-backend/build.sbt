@@ -27,7 +27,8 @@ lazy val commonSettings = Seq(
   resolvers ++= Seq(
     Resolver.sonatypeRepo("snapshots"),
     Resolver.bintrayRepo("lonelyplanet", "maven"),
-    Resolver.bintrayRepo("kwark", "maven") // Required for Slick 3.1.1.2, see https://github.com/azavea/raster-foundry/pull/1576
+    Resolver.bintrayRepo("kwark", "maven"), // Required for Slick 3.1.1.2, see https://github.com/azavea/raster-foundry/pull/1576б
+    "Apache Snapshots repository" at "https://repository.apache.org/content/groups/snapshots/" // Apache commons-math4
   ),
   shellPrompt := { s => Project.extract(s).currentProject.id + " > " },
   addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
@@ -152,7 +153,8 @@ lazy val datamodel = Project("datamodel", file("datamodel"))
       Dependencies.circeCore,
       Dependencies.circeGenericExtras,
       Dependencies.akka,
-      Dependencies.akkahttp
+      Dependencies.akkahttp,
+      Dependencies.commonsMath
     )
   })
 

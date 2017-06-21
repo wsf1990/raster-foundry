@@ -1,7 +1,7 @@
 package com.azavea.rf.datamodel.color.functions
 
 object Approximations {
-  def pow(a: Double, b: Double): Double = { // exponentiation by squaring
+  /*def pow(a: Double, b: Double): Double = { // exponentiation by squaring
     if(a < 1 && java.lang.Double.isInfinite(b)) return 0d
     if(a >= 1 && java.lang.Double.isInfinite(b)) return Double.NaN
     if(java.lang.Double.isNaN(a) || java.lang.Double.isNaN(b)) return Double.NaN
@@ -24,5 +24,5 @@ object Approximations {
   def exp(value: Double): Double = {
     val tmp = (1512775 * value + (1072693248 - 60801)).toLong
     java.lang.Double.longBitsToDouble(tmp << 32)
-  }
+  }*/
 }
