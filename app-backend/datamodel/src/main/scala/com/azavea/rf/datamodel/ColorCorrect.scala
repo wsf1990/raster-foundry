@@ -386,7 +386,7 @@ object ColorCorrect extends TimingLogging {
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
       val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
       val result = timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") {
-        old.ColorCorrect(rgbTile, rgbHist, old.ColorCorrect.Params(
+        fast.ColorCorrect(rgbTile, rgbHist, fast.ColorCorrect.Params(
           redBand, greenBand, blueBand,
           gamma, bandClipping, tileClipping,
           sigmoidalContrast, saturation, equalize,
