@@ -20,15 +20,6 @@ object ColorCorrect extends TimingLogging {
   case class MaybeClipBounds(maybeMin: Option[Int], maybeMax: Option[Int]) extends ClipValue
   case class ClippingParams(band: Int, bounds: ClipValue)
 
-  // TODO: Now that each correction is a separate class, it should be possible to refactor this object to place the
-  // necessary corrections with the classes that enable them. So rather than
-  // ```
-  // val maybeAdjustContrast =
-  //   for (c <- params.brightContrast.contrast)
-  //     yield (mb: MultibandTile) => mb.mapBands { (i, tile) => adjustContrast(tile, c) }
-  // ```
-  //
-  // We would do something like `params.brightContrast.adjustContrast(tile)`
   @JsonCodec
   case class Params(
     redBand: Int, greenBand: Int, blueBand: Int,
@@ -54,8 +45,6 @@ object ColorCorrect extends TimingLogging {
       result
     }
   }
-
-  private def lazyWrapper[T](f: => T): T = f
 
   @inline def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
     if(isData(z)) {
@@ -228,4 +217,6 @@ object ColorCorrect extends TimingLogging {
     else if (z > 255) 255
     else z
   }
+
+  private def lazyWrapper[T](f: => T): T = f
 }
