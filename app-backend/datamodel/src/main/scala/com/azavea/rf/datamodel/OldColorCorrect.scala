@@ -1,12 +1,13 @@
 package com.azavea.rf.datamodel.old
 
-import java.io._
+/**
+  * It's an original ColoeCorrect.scala file, original implementation,
+  * kept here in case of color correction quality regressions.
+  */
 
 import io.circe._
 import io.circe.syntax._
 import io.circe.generic.JsonCodec
-
-import spire.syntax.cfor._
 
 import geotrellis.raster._
 import geotrellis.raster.crop._
@@ -16,10 +17,13 @@ import geotrellis.raster.sigmoidal.SigmoidalContrast
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 
-import scala.math._
-import scala.annotation.tailrec
+import spire.syntax.cfor._
 import com.azavea.rf.datamodel._
 import com.azavea.rf.datamodel.color._
+
+import scala.math._
+import scala.annotation.tailrec
+import java.io._
 
 object SaturationAdjust {
   def apply(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
