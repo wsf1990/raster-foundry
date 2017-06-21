@@ -20,4 +20,9 @@ object Approximations {
     val tmp2 = (b_faction * (tmp - 4606921280493453312L)).toLong + 4606921280493453312L
     r * java.lang.Double.longBitsToDouble(tmp2)
   }
+
+  def exp(value: Double): Double = {
+    val tmp = (1512775 * value + (1072693248 - 60801)).toLong
+    java.lang.Double.longBitsToDouble(tmp << 32)
+  }
 }

@@ -26,4 +26,27 @@ class ApproximationsSpec extends FunSpec with Matchers {
       }
     }
   }
+
+  it("Approximations.exp in SigmoidalContrast should be +- 403 of the FastMath.exp") {
+    // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
+    // a Double in the range [0.0, 2.0].
+    val alphas = 0d to 1d by 0.2
+    val betas = 0d to 10d by 0.2
+
+    for {
+      alpha <- alphas
+      beta <- betas
+    } yield {
+      val fst = Approximations.exp(beta * alpha)
+      val snd = FastMath.exp(beta * alpha)
+      val thrd = math.exp(beta * alpha)
+
+      if(!java.lang.Double.isNaN(fst) && !java.lang.Double.isNaN(snd) && !java.lang.Double.isNaN(thrd)) {
+        fst shouldBe snd +- 403
+      } else {
+        java.lang.Double.isNaN(fst) shouldBe java.lang.Double.isNaN(snd)
+        java.lang.Double.isNaN(snd) shouldBe java.lang.Double.isNaN(thrd)
+      }
+    }
+  }
 }
