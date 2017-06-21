@@ -11,7 +11,7 @@ import geotrellis.raster.equalization.HistogramEqualization
 import geotrellis.raster.histogram.Histogram
 
 import spire.syntax.cfor._
-import org.apache.commons.math4.util.{FastMath => math}
+import org.apache.commons.math4.util.FastMath
 
 import scala.annotation.tailrec
 
@@ -245,7 +245,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -263,7 +263,7 @@ object ColorCorrect extends TimingLogging {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * math.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -451,7 +451,7 @@ object ColorCorrect extends TimingLogging {
     tile.mapIfSet { z =>
       clampColor {
         val gammaCorrection = 1 / gamma
-        (255 * math.pow(z / 255.0, gammaCorrection)).toInt
+        (255 * FastMath.pow(z / 255.0, gammaCorrection)).toInt
       }
     }
 }
