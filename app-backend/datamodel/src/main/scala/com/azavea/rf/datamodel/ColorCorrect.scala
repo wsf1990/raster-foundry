@@ -147,7 +147,10 @@ object ColorCorrect extends TimingLogging {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
+    // for some reason it works faster
+    def lazyWrapper[T](f: => T): T = f
 
+    lazyWrapper {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
           val (r, g, b) =
@@ -171,7 +174,7 @@ object ColorCorrect extends TimingLogging {
           nblue.set(col, row, clipb(sigmoidal(nb).toInt))
         }
       }
-
+    }
 
     MultibandTile(nred, ngreen, nblue)
   }
