@@ -147,39 +147,40 @@ object ColorCorrect extends TimingLogging {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
-    cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
-      cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-        val (r, g, b) =
-          (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
-            ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
-            ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
+    timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
+      cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
+        cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
+          val (r, g, b) =
+            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
+              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
-        val (nr, ng, nb) = chromaFactor match {
-          case Some(cf) => {
-            val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
-            val newChroma = scaleChroma(chroma, cf)
-            val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-            (nr, ng, nb)
+          val (nr, ng, nb) = chromaFactor match {
+            case Some(cf) => {
+              val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
+              val newChroma = scaleChroma(chroma, cf)
+              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+              (nr, ng, nb)
+            }
+
+            case _ => (r, g, b)
           }
 
-          case _ => (r, g, b)
+          nred.set(col, row, clipr(sigmoidal(nr).toInt))
+          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
         }
-
-        nred.set(col, row, clipr(sigmoidal(nr).toInt))
-        ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-        nblue.set(col, row, clipb(sigmoidal(nb).toInt))
       }
     }
 
+    printBuffer("SaturationAdjust")
     MultibandTile(nred, ngreen, nblue)
   }
 
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
     var _rgbTile = rgbTile
     val gammas = params.getGamma
-    if (params.equalize.enabled) _rgbTile = timedCreate("FastColorCorrect", "538::HistogramEqualization start", "538::HistogramEqualization finish") {
-      HistogramEqualization(rgbTile, rgbHist)
-    }
+    if (params.equalize.enabled) _rgbTile = HistogramEqualization(rgbTile, rgbHist)
 
     val layerRgbClipping = timedCreate("FastColorCorrect", "542::layerRgbClipping start", "538::layerRgbClipping finish") {
       val range = 1 until 255
