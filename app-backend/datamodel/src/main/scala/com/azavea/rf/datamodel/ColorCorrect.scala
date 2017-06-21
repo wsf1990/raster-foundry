@@ -230,56 +230,9 @@ object ColorCorrect extends TimingLogging {
     _rgbTile
   }
 
-
   @inline def clampColor(z: Int): Int = {
     if (z < 0) 0
     else if (z > 255) 255
     else z
   }
-
-  def maxCellValue(ct: CellType): Int =
-    ct match {
-      case _: FloatCells =>
-        Float.MaxValue.toInt
-      case _: DoubleCells =>
-        Double.MaxValue.toInt
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        (1 << ct.bits) - 1
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        ((1 << ct.bits) - 1) - (1 << (ct.bits - 1))
-    }
-
-  def clipBands(tile: Tile, min: Int, max: Int): Tile = {
-    tile.mapIfSet { z =>
-      if (z > max) 255
-      else if (z < min) 0
-      else z
-    }
-  }
-
-  def normalizeAndClamp(tile: Tile, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int): Tile = {
-    val dNew = newMax - newMin
-    val dOld = oldMax - oldMin
-
-    // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
-    if (dOld == 0) tile.mapIfSet { z =>
-      if (z > newMax) newMax
-      else if (z < newMin) newMin
-      else z
-    } else tile.mapIfSet { z =>
-      val scaled = (((z - oldMin) * dNew) / dOld) + newMin
-
-      if (scaled > newMax) newMax
-      else if (scaled < newMin) newMin
-      else scaled
-    }
-  }
-
-  def gammaCorrect(tile: Tile, gamma: Double): Tile =
-    tile.mapIfSet { z =>
-      clampColor {
-        val gammaCorrection = 1 / gamma
-        (255 * Approximations.pow(z / 255.0, gammaCorrection)).toInt
-      }
-    }
 }
