@@ -23,7 +23,6 @@ object Version {
   val spark              = "2.1.0"
   val hadoop             = "2.7.3"
   val commonsIO          = "2.5"
-  val commonsMath        = "4.0-SNAPSHOT"
   val scopt              = "3.5.0"
   val scaffeine          = "2.0.0"
   val elasticacheClient  = "1.1.1"
