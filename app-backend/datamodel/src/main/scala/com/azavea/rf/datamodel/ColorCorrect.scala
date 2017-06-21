@@ -55,7 +55,7 @@ object ColorCorrect extends TimingLogging {
     }
   }
 
-  @inline private def lazyWrapper[T](f: T): T = f
+  private def lazyWrapper[T](f: => T): T = f
 
   @inline def normalizeAndClampAndGammaCorrectPerPixel(z: Int, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int, gammaOpt: Option[Double]): Int = {
     if(isData(z)) {
