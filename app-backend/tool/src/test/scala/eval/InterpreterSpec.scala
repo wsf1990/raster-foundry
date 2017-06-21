@@ -31,6 +31,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 - src2,
       sourceMapping = Map(src1.id -> tileSource(4), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
 
@@ -53,6 +54,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 - src2,
       sourceMapping = Map(src1.id -> tileSource(4)),
+      overrides = Map.empty,
       source = goodSource
     )
 
@@ -77,6 +79,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 - src2,
       sourceMapping = Map(src1.id -> theTileSource),
+      overrides = Map.empty,
       source = badSource
     )
 
@@ -84,7 +87,7 @@ class InterpreterSpec
     val lt = Await.result(ret, 10.seconds)
 
     requests should be (empty)
-    lt should be (Invalid(NEL.of(RasterRetrievalError(src1.id, theTileSource.id), MissingParameter(src2.id))))
+    lt should be (Invalid(NEL.of(MissingParameter(src2.id), RasterRetrievalError(src1.id, theTileSource.id))))
   }
 
   it("interpretPure - simple") {
@@ -117,6 +120,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = srcAST.classify(breakmap),
       sourceMapping = Map(srcAST.id -> tileSource(4)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Classification node: ", srcAST.classify(breakmap).asJson.noSpaces)
@@ -140,6 +144,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = srcAST.classify(breakmap),
       sourceMapping = Map(srcAST.id -> tileSource(4)),
+      overrides = Map.empty,
       source = goodSource
     )
 
@@ -161,6 +166,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 - src2,
       sourceMapping = Map(src1.id -> tileSource(1), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Subtraction node: ", (src1 - src2).asJson.noSpaces)
@@ -186,6 +192,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = ast,
       sourceMapping = Map(src1.id -> tileSource(5), src2.id -> tileSource(4), src3.id -> tileSource(1)),
+      overrides = Map.empty,
       source = goodSource
     )
 
@@ -207,6 +214,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 / src2,
       sourceMapping = Map(src1.id -> tileSource(4), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Division node: ", (src1 / src2).asJson.noSpaces)
@@ -231,6 +239,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = ast,
       sourceMapping = Map(src1.id -> tileSource(1), src2.id -> tileSource(5), src3.id -> tileSource(4)),
+      overrides = Map.empty,
       source = goodSource
     )
 
@@ -252,6 +261,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 * src2,
       sourceMapping = Map(src1.id -> tileSource(4), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Multiplication node: ", (src1 * src2).asJson.noSpaces)
@@ -274,6 +284,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1 + src2,
       sourceMapping = Map(src1.id -> tileSource(4), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Addition node: ", (src1 + src2).asJson.noSpaces)
@@ -296,6 +307,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1.max(src2),
       sourceMapping = Map(src1.id -> tileSource(1), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("LocalMax node: ", (src1.max(src2)).asJson.noSpaces)
@@ -318,6 +330,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = src1.min(src2),
       sourceMapping = Map(src1.id -> tileSource(1), src2.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("LocalMin node: ", (src1.min(src2)).asJson.noSpaces)
@@ -341,6 +354,7 @@ class InterpreterSpec
     val tms = Interpreter.interpretTMS(
       ast = ndvi,
       sourceMapping = Map(nir.id -> tileSource(1), red.id -> tileSource(5)),
+      overrides = Map.empty,
       source = goodSource
     )
     println("Simple NDVI calculation: ", ndvi.asJson.noSpaces)
@@ -349,8 +363,32 @@ class InterpreterSpec
     val op = Await.result(ret, 10.seconds) match {
       case Valid(lazytile) =>
         val maybeTile = lazytile.evaluateDouble
-        requests.length should be (4)
+        requests.length should be (2)
         maybeTile.get.getDouble(0, 0) should be (-4.0/6.0)
+      case i@Invalid(_) =>
+        fail(s"$i")
+    }
+  }
+
+  it("should evaluate using constant tiles") {
+    requests = Nil
+    val forty = Constant(UUID.randomUUID, 40, None)
+    val two = Constant(UUID.randomUUID, 2, None)
+    val lifeUniverseEtc = forty + two
+    val tms = Interpreter.interpretTMS(
+      ast = lifeUniverseEtc,
+      sourceMapping = Map(),
+      overrides = Map.empty,
+      source = goodSource
+    )
+    println("Simple Constant calculation: ", lifeUniverseEtc.asJson.noSpaces)
+
+    val ret = tms(0, 1, 1)
+    val op = Await.result(ret, 10.seconds) match {
+      case Valid(lazytile) =>
+        val maybeTile = lazytile.evaluateDouble
+        requests.length should be (0)
+        maybeTile.get.getDouble(0, 0) should be (42)
       case i@Invalid(_) =>
         fail(s"$i")
     }

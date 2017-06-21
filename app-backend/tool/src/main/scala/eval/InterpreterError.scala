@@ -38,7 +38,7 @@ case class AttributeStoreFetchError(id: UUID) extends InterpreterError {
 
 /** An error encountered when a bound parameter's source can't be resolved */
 case class RasterRetrievalError(id: UUID, refId: UUID) extends InterpreterError {
-  def repr = s"Unable to retrieve raster for $refId"
+  def repr = s"Unable to retrieve raster for Scene ${refId} on AST node ${id}"
 }
 
 case class DatabaseError(id: UUID) extends InterpreterError {
@@ -47,6 +47,10 @@ case class DatabaseError(id: UUID) extends InterpreterError {
 
 case class ASTDecodeError(id: UUID, msg: DecodingFailure) extends InterpreterError {
   def repr = s"Unable to decode the AST associated with ToolRun ${id}: ${msg}"
+}
+
+case class InvalidOverride(id: UUID) extends InterpreterError {
+  def repr = s"Node ${id} was given an incompatible override value"
 }
 
 object InterpreterError {
