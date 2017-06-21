@@ -46,7 +46,7 @@ object ColorCorrect extends TimingLogging {
       (tile.subsetBands(redBand, greenBand, blueBand), Array(hist(redBand), hist(greenBand), hist(blueBand)))
 
     def colorCorrect(tile: MultibandTile, hist: Seq[Histogram[Double]]): MultibandTile = {
-      val (rgbTile, rgbHist) = timedCreate("Params", "314::reorderBands start", "314::reorderBands finish") { reorderBands(tile, hist) }
+      val (rgbTile, rgbHist) = reorderBands(tile, hist)
       val result = timedCreate("Params", "315::ColorCorrect start", "315::ColorCorrect finish") {
         ColorCorrect(rgbTile, rgbHist, this)
       }
@@ -103,6 +103,13 @@ object ColorCorrect extends TimingLogging {
     (specificBand: Option[Int], allBands: Option[Int], tileDefault: Int) =>
       specificBand.fold(allBands)(Some(_)).fold(Some(tileDefault))(x => Some(x))
 
+
+  @inline def clampColor(z: Int): Int = {
+    if (z < 0) 0
+    else if (z > 255) 255
+    else z
+  }
+
   def complexColorCorrect(rgbTile: MultibandTile, chromaFactor: Option[Double])
                          (layerNormalizeArgs: Map[Int, ClipBounds], gammas: Map[Int, Option[Double]])
                          (sigmoidalContrast: SigmoidalContrast)
@@ -147,44 +154,38 @@ object ColorCorrect extends TimingLogging {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
-    timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
-      cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
-        cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
-          val (r, g, b) =
-            (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
-              ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
+    cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
+      cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
+        val (r, g, b) =
+          (ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(red.get(col, row), rclipMin, rclipMax, rnewMin, rnewMax, gr),
+            ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(green.get(col, row), gclipMin, gclipMax, gnewMin, gnewMax, gg),
+            ColorCorrect.normalizeAndClampAndGammaCorrectPerPixel(blue.get(col, row), bclipMin, bclipMax, bnewMin, bnewMax, gb))
 
-          val (nr, ng, nb) = chromaFactor match {
-            case Some(cf) => {
-              val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
-              val newChroma = scaleChroma(chroma, cf)
-              val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
-              (nr, ng, nb)
-            }
-
-            case _ => (r, g, b)
+        val (nr, ng, nb) = chromaFactor match {
+          case Some(cf) => {
+            val (hue, chroma, luma) = RGBToHCLuma(r, g, b)
+            val newChroma = scaleChroma(chroma, cf)
+            val (nr, ng, nb) = HCLumaToRGB(hue, newChroma, luma)
+            (nr, ng, nb)
           }
 
-          nred.set(col, row, clipr(sigmoidal(nr).toInt))
-          ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
-          nblue.set(col, row, clipb(sigmoidal(nb).toInt))
+          case _ => (r, g, b)
         }
+
+        nred.set(col, row, clipr(sigmoidal(nr).toInt))
+        ngreen.set(col, row, clipg(sigmoidal(ng).toInt))
+        nblue.set(col, row, clipb(sigmoidal(nb).toInt))
       }
     }
-
-    printBuffer("SaturationAdjust")
     MultibandTile(nred, ngreen, nblue)
   }
 
   def apply(rgbTile: MultibandTile, rgbHist: Array[Histogram[Double]], params: Params): MultibandTile = {
     var _rgbTile = rgbTile
     val gammas = params.getGamma
-    if (params.equalize.enabled) _rgbTile = timedCreate("FastColorCorrect", "538::HistogramEqualization start", "538::HistogramEqualization finish") {
-      HistogramEqualization(rgbTile, rgbHist)
-    }
+    if (params.equalize.enabled) _rgbTile = HistogramEqualization(rgbTile, rgbHist)
 
-    val layerRgbClipping = timedCreate("FastColorCorrect", "542::layerRgbClipping start", "538::layerRgbClipping finish") {
+    val layerRgbClipping = {
       val range = 1 until 255
       var isCorrected = true
       val iMaxMin: Array[(Int, Int)] = Array.ofDim(3)
@@ -220,66 +221,6 @@ object ColorCorrect extends TimingLogging {
       2 -> MaybeClipBounds(params.bandClipping.blueMin, params.bandClipping.blueMax)
     )
 
-
-    _rgbTile = timedCreate("FastColorCorrect", "579::SaturationAdjust.complex start", "579::SaturationAdjust.complex finish") {
-      complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
-    }
-
-    printBuffer("FastColorCorrect")
-
-    _rgbTile
+    complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
   }
-
-
-  @inline def clampColor(z: Int): Int = {
-    if (z < 0) 0
-    else if (z > 255) 255
-    else z
-  }
-
-  def maxCellValue(ct: CellType): Int =
-    ct match {
-      case _: FloatCells =>
-        Float.MaxValue.toInt
-      case _: DoubleCells =>
-        Double.MaxValue.toInt
-      case _: BitCells | _: UByteCells | _: UShortCells =>
-        (1 << ct.bits) - 1
-      case _: ByteCells | _: ShortCells | _: IntCells =>
-        ((1 << ct.bits) - 1) - (1 << (ct.bits - 1))
-    }
-
-  def clipBands(tile: Tile, min: Int, max: Int): Tile = {
-    tile.mapIfSet { z =>
-      if (z > max) 255
-      else if (z < min) 0
-      else z
-    }
-  }
-
-  def normalizeAndClamp(tile: Tile, oldMin: Int, oldMax: Int, newMin: Int, newMax: Int): Tile = {
-    val dNew = newMax - newMin
-    val dOld = oldMax - oldMin
-
-    // When dOld is nothing (normalization is meaningless in this context), we still need to clamp
-    if (dOld == 0) tile.mapIfSet { z =>
-      if (z > newMax) newMax
-      else if (z < newMin) newMin
-      else z
-    } else tile.mapIfSet { z =>
-      val scaled = (((z - oldMin) * dNew) / dOld) + newMin
-
-      if (scaled > newMax) newMax
-      else if (scaled < newMin) newMin
-      else scaled
-    }
-  }
-
-  def gammaCorrect(tile: Tile, gamma: Double): Tile =
-    tile.mapIfSet { z =>
-      clampColor {
-        val gammaCorrection = 1 / gamma
-        (255 * Approximations.pow(z / 255.0, gammaCorrection)).toInt
-      }
-    }
 }
