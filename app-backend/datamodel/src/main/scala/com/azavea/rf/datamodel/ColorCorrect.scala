@@ -147,7 +147,7 @@ object ColorCorrect extends TimingLogging {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
-    timedCreate("SaturationAdjust", "190::cfor start", "190::cfor finish") {
+    {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>
           val (r, g, b) =
@@ -173,7 +173,6 @@ object ColorCorrect extends TimingLogging {
       }
     }
 
-    printBuffer("SaturationAdjust")
     MultibandTile(nred, ngreen, nblue)
   }
 
@@ -217,7 +216,7 @@ object ColorCorrect extends TimingLogging {
       1 -> MaybeClipBounds(params.bandClipping.greenMin, params.bandClipping.greenMax),
       2 -> MaybeClipBounds(params.bandClipping.blueMin, params.bandClipping.blueMax)
     )
-    
+
     complexColorCorrect(_rgbTile, params.saturation.saturation)(layerNormalizeArgs, gammas)(params.sigmoidalContrast)(colorCorrectArgs, params.tileClipping)
   }
 
