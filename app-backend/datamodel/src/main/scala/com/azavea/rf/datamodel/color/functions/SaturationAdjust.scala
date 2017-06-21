@@ -2,7 +2,6 @@ package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster.{ArrayTile, MultibandTile}
 
-import org.apache.commons.math3.util.FastMath
 import spire.syntax.cfor.cfor
 
 object SaturationAdjust {
@@ -65,7 +64,7 @@ object SaturationAdjust {
   // Reverse the process above
   def HCLumaToRGB(hue: Double, chroma: Double, luma: Double): (Int, Int, Int) = {
     val sextant = hue / 60d
-    val X = chroma * (1 - FastMath.abs((sextant % 2) - 1))
+    val X = chroma * (1 - math.abs((sextant % 2) - 1))
     // Projected color values, i.e., on the flat projection of the RGB cube
     val (rFlat: Double, gFlat: Double, bFlat: Double) = (chroma, sextant) match {
       case (0.0, _) => (0.0, 0.0, 0.0) // Gray (or black / white)
@@ -89,7 +88,7 @@ object SaturationAdjust {
   def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
-    val scaled = FastMath.pow(chroma, 1.0 / scaleFactor)
+    val scaled = Approximations.pow(chroma, 1.0 / scaleFactor)
     if (scaled < 0.0) 0.0
     else if (scaled > 1.0) 1.0
     else scaled
