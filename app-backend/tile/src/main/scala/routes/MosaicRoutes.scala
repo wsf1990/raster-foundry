@@ -81,22 +81,16 @@ object MosaicRoutes extends LazyLogging with TimingLogging {
           complete {
             val future =
                 Mosaic(projectId, zoom, x, y, tag)
+                  .map { r =>  timedCreate("MosaicRoutes", "mosaic start", "mosaic finish") { r } }
                   .map(_.renderPng)
+                  .map { r =>  timedCreate("MosaicRoutes", "renderPng start", "renderPng finish") { r } }
                   .getOrElse(emptyTilePng)
                   .map(pngAsHttpResponse)
 
             future onComplete {
-              case Success(s) => s
+              case Success(s) => { s; printBuffer("MosaicRoutes") }
               case Failure(e) =>
                 logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
-            }
-
-            future.map { thing =>
-              timedCreate("MosaicRoutes", "tag start", "tag finish") {
-                thing
-              }
-            } onComplete {
-              _ => printBuffer("MosaicRoutes")
             }
 
             future
