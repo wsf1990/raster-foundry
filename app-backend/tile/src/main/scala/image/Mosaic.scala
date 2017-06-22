@@ -32,6 +32,8 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
   private[this] val loading = metrics.timer("Mosaic")
+  private[this] val loading2 = metrics.timer("Mosaic2")
+  private[this] val loading3 = metrics.timer("Mosaic.fetch")
 
   import com.codahale.metrics._
   import java.util.concurrent.TimeUnit
@@ -229,21 +231,32 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
     // no tag to control cache rollover, so don't cache
     mosaicDefinition(projectId, tag.map(s => TagWithTTL(tag=s, ttl=60.seconds))).flatMap { mosaic =>
       val futureTiles: Future[Seq[MultibandTile]] = {
-        val tiles = mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
+        val tiles: Seq[Future[Option[MultibandTile]]] = mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
           if (rgbOnly) {
-            maybeColorCorrectParams.map { colorCorrectParams =>
+            val result: Option[Future[Option[MultibandTile]]] = maybeColorCorrectParams.map { colorCorrectParams =>
               Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
                 LayerCache.layerHistogram(sceneId, zoom).map { hist =>
                   colorCorrectParams.colorCorrect(tile, hist)
                 }
               }.value
             }
+
+            result.map { f =>
+              loading3.timeFuture { f }
+            }
+
+            result
+
           } else {
             // Wrap in List so it can flattened by the same flatMap above
             List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
         }
-        Future.sequence(tiles).map(_.flatten)
+        val result = Future.sequence(tiles).map(_.flatten)
+
+        loading2.timeFuture { result }
+
+        result
       }
 
       val futureMergeTile =
