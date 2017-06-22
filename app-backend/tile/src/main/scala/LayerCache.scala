@@ -59,7 +59,7 @@ object LayerCache extends Config with LazyLogging with nl.grons.metrics.scala.De
   private[this] val loading = metrics.timer("LayerCache attributeStoreforLayer")
   private[this] val loading2 = metrics.timer("LayerCache readtile kv")
 
-  import com.codahale.metrics._
+  import com.codahale.metrics.ConsoleReporter
   import java.util.concurrent.TimeUnit
 
   def startReport(): Unit = {
