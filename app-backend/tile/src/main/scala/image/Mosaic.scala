@@ -76,12 +76,18 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
 
   /** Fetch the tile for given resolution. If it is not present, use a tile from a lower zoom level */
   def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] = {
-    val result = tileLayerMetadata(id, zoom).flatMap { case (sourceZoom, tlm) =>
+    val tlm = tileLayerMetadata(id, zoom)
+    loading.timeFuture { tlm.value }
+
+    val result = tlm.flatMap { case (sourceZoom, tlm) =>
       val zoomDiff = zoom - sourceZoom
       val resolutionDiff = 1 << zoomDiff
       val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
       if (tlm.bounds.includes(sourceKey)) {
-        val result = LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
+        val lc = LayerCache.layerTile(id, sourceZoom, sourceKey)
+        loading2.timeFuture { lc.value }
+
+        val result = lc.map { tile =>
           val innerCol = col % resolutionDiff
           val innerRow = row % resolutionDiff
           val cols = tile.cols / resolutionDiff
@@ -94,15 +100,11 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
           )).resample(256, 256)
         }
 
-        loading2.timeFuture { result.value }
-
         result
       } else {
         OptionT.none[Future, MultibandTile]
       }
     }
-
-    loading.timeFuture { result.value }
 
     result
   }
