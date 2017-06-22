@@ -31,9 +31,9 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
-  private[this] val loading = metrics.timer("Mosaic")
-  private[this] val loading2 = metrics.timer("Mosaic2")
-  private[this] val loading3 = metrics.timer("Mosaic.fetch")
+  private[this] val loading = metrics.timer("tileLayerMetadata")
+  private[this] val loading2 = metrics.timer("LayerCache.layerTile")
+  //private[this] val loading3 = metrics.timer("Mosaic.fetch")
 
   import com.codahale.metrics._
   import java.util.concurrent.TimeUnit
@@ -75,13 +75,13 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   }
 
   /** Fetch the tile for given resolution. If it is not present, use a tile from a lower zoom level */
-  def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] =
-    tileLayerMetadata(id, zoom).flatMap { case (sourceZoom, tlm) =>
+  def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] = {
+    val result = tileLayerMetadata(id, zoom).flatMap { case (sourceZoom, tlm) =>
       val zoomDiff = zoom - sourceZoom
       val resolutionDiff = 1 << zoomDiff
       val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
       if (tlm.bounds.includes(sourceKey)) {
-        LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
+        val result = LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
           val innerCol = col % resolutionDiff
           val innerRow = row % resolutionDiff
           val cols = tile.cols / resolutionDiff
@@ -93,10 +93,19 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
             rowMax = (innerRow + 1) * rows - 1
           )).resample(256, 256)
         }
+
+        loading2.timeFuture { result.value }
+
+        result
       } else {
         OptionT.none[Future, MultibandTile]
       }
     }
+
+    loading.timeFuture { result.value }
+
+    result
+  }
 
   /** Fetch the tile for the given zoom level and bbox
     * If no bbox is specified, it will use the project tileLayerMetadata layoutExtent
@@ -233,30 +242,19 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
       val futureTiles: Future[Seq[MultibandTile]] = {
         val tiles: Seq[Future[Option[MultibandTile]]] = mosaic.flatMap { case MosaicDefinition(sceneId, maybeColorCorrectParams) =>
           if (rgbOnly) {
-            val result: Option[Future[Option[MultibandTile]]] = maybeColorCorrectParams.map { colorCorrectParams =>
+            maybeColorCorrectParams.map { colorCorrectParams =>
               Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
                 LayerCache.layerHistogram(sceneId, zoom).map { hist =>
                   colorCorrectParams.colorCorrect(tile, hist)
                 }
               }.value
             }
-
-            result.map { f =>
-              loading3.timeFuture { f }
-            }
-
-            result
-
           } else {
             // Wrap in List so it can flattened by the same flatMap above
             List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
         }
-        val result = Future.sequence(tiles).map(_.flatten)
-
-        loading2.timeFuture { result }
-
-        result
+        Future.sequence(tiles).map(_.flatten)
       }
 
       val futureMergeTile =
@@ -265,11 +263,7 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
           tiles <- futureTiles
         } yield colorCorrectAndMergeTiles(tiles, doColorCorrect)
 
-      val result = OptionT(futureMergeTile)
-
-      loading.timeFuture { result.value }
-
-      result
+      OptionT(futureMergeTile)
     }
   }
 
