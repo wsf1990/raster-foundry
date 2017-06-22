@@ -31,9 +31,10 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
-  private[this] val loading = metrics.timer("tileLayerMetadata")
-  private[this] val loading2 = metrics.timer("LayerCache.layerTile")
-  //private[this] val loading3 = metrics.timer("Mosaic.fetch")
+  private[this] val loading = metrics.timer("tileLayerMetadata (IO not cache)")
+  private[this] val loading2 = metrics.timer("tileLayerMetadata (IO cache, future time)")
+  private[this] val loading3 = metrics.timer("Mosaic.fetch tileLayerMetadata (IO cache, future time)")
+  private[this] val loading4 = metrics.timer("Mosaic.fetch LayerCache.layerTile (IO cache, future time)")
 
   import com.codahale.metrics._
   import java.util.concurrent.TimeUnit
@@ -51,7 +52,7 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   startReport()
 
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] = {
-    LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
+    val result = LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
       // because metadata attributes are cached in AttributeStore itself, there is no point caching this function
       val layerName = id.toString
       for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
@@ -61,6 +62,9 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
         } }
       }
     }
+
+    loading2.timeFuture { result.value }
+    result
   }
 
   def mosaicDefinition(projectId: UUID, tagttl: Option[TagWithTTL])(implicit database: Database): OptionT[Future, Seq[MosaicDefinition]] = {
@@ -77,6 +81,7 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   /** Fetch the tile for given resolution. If it is not present, use a tile from a lower zoom level */
   def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] = {
     val tlm = tileLayerMetadata(id, zoom)
+    loading3.timeFuture { tlm.value }
 
     val result = tlm.flatMap { case (sourceZoom, tlm) =>
       val zoomDiff = zoom - sourceZoom
@@ -84,6 +89,7 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
       val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
       if (tlm.bounds.includes(sourceKey)) {
         val lc = LayerCache.layerTile(id, sourceZoom, sourceKey)
+        loading4.timeFuture { lc.value }
 
         val result = lc.map { tile =>
           val innerCol = col % resolutionDiff

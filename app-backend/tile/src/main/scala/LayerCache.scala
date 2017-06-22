@@ -56,8 +56,8 @@ object LayerCache extends Config with LazyLogging with nl.grons.metrics.scala.De
   private val tileCache = HeapBackedMemcachedClient(memcachedClient)
   private val astCache = HeapBackedMemcachedClient(memcachedClient)
 
-  private[this] val loading = metrics.timer("LayerCache attributeStoreforLayer")
-  private[this] val loading2 = metrics.timer("LayerCache readtile kv")
+  private[this] val loading = metrics.timer("attributeStoreForLayer (IO not cache)")
+  private[this] val loading2 = metrics.timer("layerTile (IO not cache)")
 
   import com.codahale.metrics.ConsoleReporter
   import java.util.concurrent.TimeUnit
@@ -105,7 +105,7 @@ object LayerCache extends Config with LazyLogging with nl.grons.metrics.scala.De
           val maxZooms: Map[String, Int] = blocking {
             store.layerIds.groupBy(_.name).mapValues(_.map(_.zoom).max)
           }
-          (store, maxZooms)
+          loading.time { (store, maxZooms) }
         }
       }
       result
