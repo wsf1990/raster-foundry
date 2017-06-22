@@ -27,9 +27,26 @@ import scala.concurrent.duration._
 
 case class TagWithTTL(tag: String, ttl: Duration)
 
-object Mosaic {
+object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
+
+  private[this] val loading = metrics.timer("Mosaic")
+
+  import com.codahale.metrics._
+  import java.util.concurrent.TimeUnit
+
+  def startReport(): Unit = {
+    val reporter =
+      ConsoleReporter.forRegistry(metricRegistry)
+        .convertRatesTo(TimeUnit.SECONDS)
+        .convertDurationsTo(TimeUnit.MILLISECONDS)
+        .build
+
+    reporter.start(1, TimeUnit.SECONDS)
+  }
+
+  startReport()
 
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] = {
     LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
@@ -225,7 +242,7 @@ object Mosaic {
             // Wrap in List so it can flattened by the same flatMap above
             List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
-        }.toSeq
+        }
         Future.sequence(tiles).map(_.flatten)
       }
 
@@ -235,7 +252,11 @@ object Mosaic {
           tiles <- futureTiles
         } yield colorCorrectAndMergeTiles(tiles, doColorCorrect)
 
-      OptionT(futureMergeTile)
+      val result = OptionT(futureMergeTile)
+
+      loading.timeFuture { result.value }
+
+      result
     }
   }
 
