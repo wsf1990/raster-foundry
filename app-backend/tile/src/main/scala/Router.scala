@@ -11,7 +11,7 @@ import com.typesafe.scalalogging.LazyLogging
 
 class Router extends LazyLogging
     with TileAuthentication
-    with TileErrorHandler {
+    with TileErrorHandler with util.TimingLogging {
 
   implicit lazy val database = Database.DEFAULT
   implicit val system = AkkaSystem.system
@@ -26,7 +26,13 @@ class Router extends LazyLogging
       pathPrefix("tiles") {
         pathPrefix(JavaUUID) { projectId =>
           tileAccessAuthorized(projectId) {
-            case true => MosaicRoutes.mosaicProject(projectId)(database)
+            case true => {
+              timedCreate("Router", "MosaicRoutes start", "MosaicRoutes finish") {
+                MosaicRoutes.mosaicProject(projectId)(database)
+              }
+
+              printBuffer("Router")
+            }
             case _ => reject(AuthorizationFailedRejection)
           }
         } ~
