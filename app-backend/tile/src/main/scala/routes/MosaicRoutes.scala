@@ -35,6 +35,21 @@ import geotrellis.vector.{Extent, Polygon}
 object MosaicRoutes extends LazyLogging with nl.grons.metrics.scala.DefaultInstrumented {
   private[this] val loading = metrics.timer("MoosaicRoutes")
 
+  import com.codahale.metrics._
+  import java.util.concurrent.TimeUnit
+
+  def startReport(): Unit = {
+    val reporter =
+      ConsoleReporter.forRegistry(metricRegistry)
+        .convertRatesTo(TimeUnit.SECONDS)
+        .convertDurationsTo(TimeUnit.MILLISECONDS)
+        .build
+
+    reporter.start(1, TimeUnit.SECONDS)
+  }
+
+  startReport()
+
   val emptyTilePng = IntArrayTile.ofDim(256, 256).renderPng
 
   def pngAsHttpResponse(png: Png): HttpResponse =
