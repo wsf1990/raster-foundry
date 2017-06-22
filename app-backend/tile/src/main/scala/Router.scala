@@ -27,11 +27,12 @@ class Router extends LazyLogging
         pathPrefix(JavaUUID) { projectId =>
           tileAccessAuthorized(projectId) {
             case true => {
-              timedCreate("Router", "MosaicRoutes start", "MosaicRoutes finish") {
+              val result = timedCreate("Router", "MosaicRoutes start", "MosaicRoutes finish") {
                 MosaicRoutes.mosaicProject(projectId)(database)
               }
 
               printBuffer("Router")
+              result
             }
             case _ => reject(AuthorizationFailedRejection)
           }
