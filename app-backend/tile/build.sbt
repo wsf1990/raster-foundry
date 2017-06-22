@@ -25,3 +25,5 @@ initialCommands in console := """
   |object Main extends Config { implicit val database = Database.DEFAULT }
   |import Main._
 """.trim.stripMargin
+
+libraryDependencies += "nl.grons" %% "metrics-scala" % "3.5.8_a2.3"

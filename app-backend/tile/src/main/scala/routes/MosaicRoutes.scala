@@ -2,12 +2,14 @@ package com.azavea.rf.tile.routes
 
 import cats.data.OptionT
 import cats.implicits._
+
 import com.azavea.rf.common.RfStackTrace
 import com.azavea.rf.tile._
 import com.azavea.rf.tile.image._
 import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.ColorCorrect
+
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff._
 import geotrellis.raster.render.Png
@@ -18,20 +20,20 @@ import akka.http.scaladsl.unmarshalling._
 import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
-
 import scala.collection.mutable.ArrayBuffer
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.util._
 import java.util.UUID
 
 import akka.http.scaladsl.marshalling.Marshaller
-import com.azavea.rf.tile.util.TimingLogging
 import geotrellis.proj4._
 import geotrellis.slick.Projected
 import geotrellis.vector.{Extent, Polygon}
 
-object MosaicRoutes extends LazyLogging with TimingLogging {
+object MosaicRoutes extends LazyLogging with nl.grons.metrics.scala.DefaultInstrumented {
+  private[this] val loading = metrics.timer("MoosaicRoutes")
 
   val emptyTilePng = IntArrayTile.ofDim(256, 256).renderPng
 
@@ -79,16 +81,16 @@ object MosaicRoutes extends LazyLogging with TimingLogging {
       parameter("tag".?) { tag =>
         get {
           complete {
+            val future1 = Mosaic(projectId, zoom, x, y, tag).map(_.renderPng)
             val future =
-                Mosaic(projectId, zoom, x, y, tag)
-                  .map { r =>  timedCreate("MosaicRoutes", "mosaic start", "mosaic finish") { r } }
-                  .map(_.renderPng)
-                  .map { r =>  timedCreate("MosaicRoutes", "renderPng start", "renderPng finish") { r } }
-                  .getOrElse(emptyTilePng)
-                  .map(pngAsHttpResponse)
+              future1
+                .getOrElse(emptyTilePng)
+                .map(pngAsHttpResponse)
+
+            loading.timeFuture { future1.value }
 
             future onComplete {
-              case Success(s) => { s; printBuffer("MosaicRoutes") }
+              case Success(s) => s
               case Failure(e) =>
                 logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
             }
