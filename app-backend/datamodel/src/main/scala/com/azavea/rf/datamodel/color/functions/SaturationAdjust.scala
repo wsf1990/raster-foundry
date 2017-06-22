@@ -1,9 +1,13 @@
 package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster.{ArrayTile, MultibandTile}
-
+import org.apache.commons.math3.util.FastMath
 import spire.syntax.cfor.cfor
 
+/**
+  * Usage of Approximations.{pow | exp} functions can allow to speed up this function on 10 - 15ms.
+  * We can consider these functions usages in case of real performance issues caused by a long saturation adjust.
+  */
 object SaturationAdjust {
   def apply(rgbTile: MultibandTile, chromaFactor: Double): MultibandTile = {
     scaleTileChroma(rgbTile, chromaFactor)
@@ -88,7 +92,7 @@ object SaturationAdjust {
   def scaleChroma(chroma: Double, scaleFactor: Double): Double = {
     // Chroma is a Double in the range [0.0, 1.0]. Scale factor is the same as our other gamma corrections:
     // a Double in the range [0.0, 2.0].
-    val scaled = Approximations.pow(chroma, 1.0 / scaleFactor)
+    val scaled = FastMath.pow(chroma, 1.0 / scaleFactor)
     if (scaled < 0.0) 0.0
     else if (scaled > 1.0) 1.0
     else scaled

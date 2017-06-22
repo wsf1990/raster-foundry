@@ -1,7 +1,12 @@
 package com.azavea.rf.datamodel.color.functions
 
 import geotrellis.raster._
+import org.apache.commons.math3.util.FastMath
 
+/**
+  * Usage of Approximations.{pow | exp} functions can allow to speed up this function on 10 - 15ms.
+  * We can consider these functions usages in case of real performance issues caused by a long sigmoidal contrast.
+  */
 object SigmoidalContrast {
   /**
     * @param  cellType   The cell type on which the transform is to act
@@ -24,8 +29,8 @@ object SigmoidalContrast {
         (intensity + (1 << (bits - 1))) / ((1 << bits) - 1)
     }
 
-    val numer = 1 / (1 + Approximations.exp(beta * (alpha - u))) - 1 / (1 + Approximations.exp(beta))
-    val denom = 1 / (1 + Approximations.exp(beta * (alpha - 1))) - 1 / (1 + Approximations.exp(beta * alpha))
+    val numer = 1 / (1 + FastMath.exp(beta * (alpha - u))) - 1 / (1 + FastMath.exp(beta))
+    val denom = 1 / (1 + FastMath.exp(beta * (alpha - 1))) - 1 / (1 + FastMath.exp(beta * alpha))
     val gu = math.max(0.0, math.min(1.0, numer / denom))
 
     cellType match {

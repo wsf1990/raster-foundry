@@ -48,7 +48,7 @@ object MosaicRoutes extends LazyLogging with nl.grons.metrics.scala.DefaultInstr
     reporter.start(1, TimeUnit.SECONDS)
   }
 
-  // startReport()
+  startReport()
 
   val emptyTilePng = IntArrayTile.ofDim(256, 256).renderPng
 

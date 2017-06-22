@@ -49,7 +49,7 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
     reporter.start(1, TimeUnit.SECONDS)
   }
 
-  startReport()
+  //startReport()
 
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] = {
     val result = LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>

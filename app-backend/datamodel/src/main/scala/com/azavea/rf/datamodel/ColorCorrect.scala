@@ -6,12 +6,17 @@ import com.azavea.rf.datamodel.color._
 import geotrellis.raster._
 import geotrellis.raster.equalization.HistogramEqualization
 import geotrellis.raster.histogram.Histogram
+import org.apache.commons.math3.util.FastMath
 import spire.syntax.cfor._
 
+/**
+  * Usage of Approximations.{pow | exp} functions can allow to speed up this function on 10 - 15ms.
+  * We can consider these functions usages in case of real performance issues caused by a long color correction.
+  */
 object ColorCorrect {
   import functions.SaturationAdjust._
   import functions.SigmoidalContrast._
-  import functions.Approximations
+  // import functions.Approximations
 
   case class LayerClipping(redMin: Int, redMax: Int, greenMin: Int, greenMax: Int, blueMin: Int, blueMax: Int)
   sealed trait ClipValue
@@ -59,7 +64,7 @@ object ColorCorrect {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * Approximations.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -77,7 +82,7 @@ object ColorCorrect {
           case Some(gamma) => {
             clampColor {
               val gammaCorrection = 1 / gamma
-              (255 * Approximations.pow(v / 255.0, gammaCorrection)).toInt
+              (255 * FastMath.pow(v / 255.0, gammaCorrection)).toInt
             }
           }
         }
@@ -133,7 +138,7 @@ object ColorCorrect {
       (clipBands(_, mrclipMin, mrclipMax), clipBands(_, mgclipMin, mgclipMax), clipBands(_, mbclipMin, mbclipMax))
     }
 
-    // For some reason with this func wrap it works faster ¯\_(ツ)_/¯
+    /** In this case for some reason with this func wrap it works faster ¯\_(ツ)_/¯ (it was micro benchmarked) */
     lazyWrapper {
       cfor(0)(_ < rgbTile.cols, _ + 1) { col =>
         cfor(0)(_ < rgbTile.rows, _ + 1) { row =>

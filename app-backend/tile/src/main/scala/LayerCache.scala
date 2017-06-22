@@ -72,7 +72,7 @@ object LayerCache extends Config with LazyLogging with nl.grons.metrics.scala.De
     reporter.start(1, TimeUnit.SECONDS)
   }
 
-  startReport()
+  // startReport()
 
   private val layerUriCache: ScaffeineCache[UUID, OptionT[Future, String]] =
     Scaffeine()
