@@ -21,12 +21,24 @@ class Router extends LazyLogging
 
   val corsSettings = CorsSettings.defaultSettings
 
+  val rejectionHandler = RejectionHandler.default
+  def logDuration(inner: Route): Route = { ctx =>
+    val start = System.currentTimeMillis()
+    // handling rejections here so that we get proper status codes
+    val innerRejectionsHandled = handleRejections(rejectionHandler)(inner)
+    mapResponse { resp =>
+      val d = System.currentTimeMillis() - start
+      print(s"[${resp.status.intValue()}] ${ctx.request.method.name} ${ctx.request.uri} took: ${d}ms")
+      resp
+    }(innerRejectionsHandled)(ctx)
+  }
+
   def root = cors() {
     handleExceptions(tileExceptionHandler) {
       pathPrefix("tiles") {
         pathPrefix(JavaUUID) { projectId =>
           tileAccessAuthorized(projectId) {
-            case true => MosaicRoutes.mosaicProject(projectId)(database)
+            case true => logDuration(MosaicRoutes.mosaicProject(projectId)(database))
             case _ => reject(AuthorizationFailedRejection)
           }
         } ~
