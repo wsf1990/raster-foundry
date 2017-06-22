@@ -56,9 +56,9 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
       val layerName = id.toString
       for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
         val z = if (zoom > maxZoom) maxZoom else zoom
-        blocking {
+        loading.time { blocking {
           z -> store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
-        }
+        } }
       }
     }
   }
@@ -77,7 +77,6 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
   /** Fetch the tile for given resolution. If it is not present, use a tile from a lower zoom level */
   def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] = {
     val tlm = tileLayerMetadata(id, zoom)
-    loading.timeFuture { tlm.value }
 
     val result = tlm.flatMap { case (sourceZoom, tlm) =>
       val zoomDiff = zoom - sourceZoom
@@ -85,7 +84,6 @@ object Mosaic extends nl.grons.metrics.scala.DefaultInstrumented {
       val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
       if (tlm.bounds.includes(sourceKey)) {
         val lc = LayerCache.layerTile(id, sourceZoom, sourceKey)
-        loading2.timeFuture { lc.value }
 
         val result = lc.map { tile =>
           val innerCol = col % resolutionDiff

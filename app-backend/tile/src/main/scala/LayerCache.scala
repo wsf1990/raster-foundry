@@ -48,13 +48,31 @@ import cats.implicits._
   * Things that are cheap to construct but contain internal state we want to re-use use LoadingCache.
   * things that require time to generate, usually a network fetch, use AsyncLoadingCache
   */
-object LayerCache extends Config with LazyLogging {
+object LayerCache extends Config with LazyLogging with nl.grons.metrics.scala.DefaultInstrumented {
   implicit val database = Database.DEFAULT
 
   val memcachedClient = KryoMemcachedClient.DEFAULT
   private val histogramCache = HeapBackedMemcachedClient(memcachedClient)
   private val tileCache = HeapBackedMemcachedClient(memcachedClient)
   private val astCache = HeapBackedMemcachedClient(memcachedClient)
+
+  private[this] val loading = metrics.timer("LayerCache attributeStoreforLayer")
+  private[this] val loading2 = metrics.timer("LayerCache readtile kv")
+
+  import com.codahale.metrics._
+  import java.util.concurrent.TimeUnit
+
+  def startReport(): Unit = {
+    val reporter =
+      ConsoleReporter.forRegistry(metricRegistry)
+        .convertRatesTo(TimeUnit.SECONDS)
+        .convertDurationsTo(TimeUnit.MILLISECONDS)
+        .build
+
+    reporter.start(1, TimeUnit.SECONDS)
+  }
+
+  startReport()
 
   private val layerUriCache: ScaffeineCache[UUID, OptionT[Future, String]] =
     Scaffeine()
@@ -76,8 +94,8 @@ object LayerCache extends Config with LazyLogging {
     })
 
   def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, (AttributeStore, Map[String, Int])] =
-    attributeStoreCache.get(layerId, _ =>
-      layerUri(layerId).mapFilter { catalogUri =>
+    attributeStoreCache.get(layerId, _ => {
+      val result: OptionT[Future, (AttributeStore, Map[String, Int])] = layerUri(layerId).mapFilter { catalogUri =>
         for (result <- S3InputFormat.S3UrlRx.findFirstMatchIn(catalogUri)) yield {
           val bucket = result.group("bucket")
           val prefix = result.group("prefix")
@@ -90,7 +108,8 @@ object LayerCache extends Config with LazyLogging {
           (store, maxZooms)
         }
       }
-    )
+      result
+    })
 
   def layerHistogram(layerId: UUID, zoom: Int): OptionT[Future, Array[Histogram[Double]]] =
     histogramCache.cachingOptionT(s"histogram-$layerId-$zoom") { implicit ec =>
@@ -105,7 +124,7 @@ object LayerCache extends Config with LazyLogging {
         val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
         blocking {
           Try {
-            reader.read(key)
+            loading2.time { reader.read(key) }
           } match {
             case Success(tile) => Option(tile)
             case Failure(e: ValueNotFoundError) => None
