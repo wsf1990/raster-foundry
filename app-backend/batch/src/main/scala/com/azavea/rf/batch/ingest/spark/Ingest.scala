@@ -170,8 +170,8 @@ object Ingest extends SparkJob with LazyLogging with Config {
     val ch = math.min(chipHeight, gb.height)
 
     // To avoid thin chips on the right/bottom borders merge to left/top
-    val chipCols: Int = gb.width / cw - 1
-    val chipRows: Int = gb.height / ch - 1
+    val chipCols: Int = gb.width / cw + 1
+    val chipRows: Int = gb.height / ch + 1
     for {
       col <- Iterator.range(start = 0, end = chipCols)
       row <- Iterator.range(start = 0, end = chipRows)
@@ -179,8 +179,8 @@ object Ingest extends SparkJob with LazyLogging with Config {
       GridBounds(
         colMin = col * cw,
         rowMin = row * cw,
-        colMax = if (col == chipCols) gb.colMax else col * cw + cw - 1,
-        rowMax = if (row == chipRows) gb.rowMax else row * ch + ch - 1)
+        colMax = if (col == chipCols - 1) gb.colMax else col * cw + cw - 1,
+        rowMax = if (row == chipRows - 1) gb.rowMax else row * ch + ch - 1)
     }
   }
 
