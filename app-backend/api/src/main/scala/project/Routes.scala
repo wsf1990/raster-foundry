@@ -253,7 +253,13 @@ trait ProjectRoutes extends Authentication
       val scenesFuture = Projects.addScenesToProject(sceneIds, projectId, user)
       scenesFuture.map { scenes =>
         val scenesToKickoff = scenes.filter(_.statusFields.ingestStatus == IngestStatus.ToBeIngested)
+
+        println(s"scenesToKickoff.map(_.id): ${scenesToKickoff.map(_.id)}")
+
         scenesToKickoff.map(_.id).map(kickoffSceneIngest)
+      } onComplete {
+        case Success(s) => println("Airflow kicked")
+        case Failure(e) => e.printStackTrace()
       }
       complete {
         scenesFuture
