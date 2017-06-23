@@ -223,23 +223,26 @@ object Ingest extends SparkJob with LazyLogging with Config {
           val geotiff = MultibandGeoTiff(
             byteReader = uriRangReader(source.uri),
             decompress = false,
-            streaming = true)
+            streaming = true
+          )
 
           gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
-            .map { chipBounds => (source, chipBounds) }
+            .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
         })
         .repartition(repartitionSize)
-        .flatMap { case (source, chipBounds) =>
+        .flatMap { case (source, chipExtent) =>
           val geotiff = MultibandGeoTiff(
             byteReader = uriRangReader(source.uri),
-            decompress = false,
-            streaming = true)
+            e = Some(chipExtent)
+          )
 
-          val chip = geotiff.tile.crop(chipBounds)
-          val chipExtent = geotiff.rasterExtent.extentFor(chipBounds)
+          val chip = geotiff.tile
+
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
 
+          // USE BUFFERED REPROJECT !!!!!!!!!!!!!!!!!!!
+          // windows buffer windows by a couple of pixels
           source.bandMaps.map { bm: BandMapping =>
             // GeoTrellis multi-band tiles are 0 indexed
             val band = maskedChip.band(bm.source - 1).reproject(chipExtent, geotiff.crs, destCRS)
