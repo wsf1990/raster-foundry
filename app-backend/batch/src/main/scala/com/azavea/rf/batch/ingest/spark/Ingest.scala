@@ -164,6 +164,14 @@ object Ingest extends SparkJob with LazyLogging with Config {
     }
   }
 
+  def bufferGrid(gb: GridBounds, by: Int = 4) =
+    gb.copy(
+      colMin = if(gb.colMin < by) 0 else gb.colMin - by,
+      colMax = if(gb.colMax < by) 0 else gb.colMax + by,
+      rowMin = if(gb.rowMax < by) 0 else gb.rowMin - by,
+      rowMax = if(gb.rowMax < by) 0 else gb.rowMax + by
+    )
+
   /** Chip out a grid bounds into component pieces of at least given size */
   def gridBoundChips(gb: GridBounds, chipWidth: Int, chipHeight: Int): Iterator[GridBounds] = {
     val cw = math.min(chipWidth, gb.width)
@@ -177,11 +185,12 @@ object Ingest extends SparkJob with LazyLogging with Config {
       col <- Iterator.range(start = 0, end = chipCols)
       row <- Iterator.range(start = 0, end = chipRows)
     } yield {
-      GridBounds(
+      bufferGrid(GridBounds(
         colMin = col * cw,
         rowMin = row * cw,
         colMax = if (col == chipCols - 1) gb.colMax else col * cw + cw - 1,
-        rowMax = if (row == chipRows - 1) gb.rowMax else row * ch + ch - 1)
+        rowMax = if (row == chipRows - 1) gb.rowMax else row * ch + ch - 1
+      ))
     }
 
     println(s"gb: $gb")
@@ -227,7 +236,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
           )
 
           gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
-            .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
+            .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds, clamp = false)) }
         })
         .repartition(repartitionSize)
         .flatMap { case (source, chipExtent) =>
