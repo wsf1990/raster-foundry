@@ -180,8 +180,8 @@ object Ingest extends SparkJob with LazyLogging with Config {
       GridBounds(
         colMin = col * cw,
         rowMin = row * cw,
-        colMax = if (col == chipCols - 1) gb.colMax else col * cw + cw,
-        rowMax = if (row == chipRows - 1) gb.rowMax else row * ch + ch
+        colMax = if (col == chipCols - 1) gb.colMax + 1 else col * cw + cw + 1,
+        rowMax = if (row == chipRows - 1) gb.rowMax + 1 else row * ch + ch + 1
       )
     }
   }
