@@ -251,21 +251,12 @@ trait ProjectRoutes extends Authentication
         complete(StatusCodes.RequestEntityTooLarge)
       }
       val scenesFuture = Projects.addScenesToProject(sceneIds, projectId, user)
-
-      val test = scenesFuture.map { scenes =>
+      scenesFuture.map { scenes =>
         val scenesToKickoff = scenes.filter(_.statusFields.ingestStatus == IngestStatus.ToBeIngested)
-        println(s"scenesToKickoff.map(_.id): ${scenesToKickoff.map(_.id)}")
         scenesToKickoff.map(_.id).map(kickoffSceneIngest)
-        scenes
       }
-
-      test onComplete {
-        case Success(s) => println("Airflow kicked")
-        case Failure(e) => e.printStackTrace()
-      }
-
       complete {
-        test
+        scenesFuture
       }
     }
   }
