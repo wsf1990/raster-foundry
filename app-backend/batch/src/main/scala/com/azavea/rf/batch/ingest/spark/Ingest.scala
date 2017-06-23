@@ -173,17 +173,21 @@ object Ingest extends SparkJob with LazyLogging with Config {
     val chipCols: Int = gb.width / cw
     val chipRows: Int = gb.height / ch
 
-    for {
+    val result = for {
       col <- Iterator.range(start = 0, end = chipCols)
       row <- Iterator.range(start = 0, end = chipRows)
     } yield {
       GridBounds(
         colMin = col * cw,
         rowMin = row * cw,
-        colMax = if (col == chipCols - 1) gb.colMax + 1 else col * cw + cw + 1,
-        rowMax = if (row == chipRows - 1) gb.rowMax + 1 else row * ch + ch + 1
-      )
+        colMax = if (col == chipCols - 1) gb.colMax else col * cw + cw - 1,
+        rowMax = if (row == chipRows - 1) gb.rowMax else row * ch + ch - 1)
     }
+
+    println(s"gb: $gb")
+    println(s"gridBoundChips: $result")
+
+    result
   }
 
   def getSizeFromURI(uri: URI, s3Client: S3Client): Long = {
