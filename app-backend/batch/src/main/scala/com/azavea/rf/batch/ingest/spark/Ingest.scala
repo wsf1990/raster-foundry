@@ -164,7 +164,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
     }
   }
 
-  /** Function to add buffer GridBounds (by 2 by default) */
+  /** Function to add GridBounds buffer */
   def bufferGrid(gb: GridBounds, by: Int = 2) =
     gb.copy(
       colMin = if(gb.colMin < by) 0 else gb.colMin - by,
@@ -246,8 +246,6 @@ object Ingest extends SparkJob with LazyLogging with Config {
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
 
-          // USE BUFFERED REPROJECT !!!!!!!!!!!!!!!!!!!
-          // windows buffer windows by a couple of pixels
           source.bandMaps.map { bm: BandMapping =>
             // GeoTrellis multi-band tiles are 0 indexed
             val band = maskedChip.band(bm.source - 1).reproject(chipExtent, geotiff.crs, destCRS)
