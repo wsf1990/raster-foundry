@@ -106,7 +106,7 @@ lazy val root = Project("root", file("."))
   .settings(commonSettings:_*)
 
 lazy val api = Project("api", file("api"))
-  .dependsOn(database, datamodel, common % "test->test;compile->compile")
+  .dependsOn(database, datamodel, adHocLabsAkkaHttpContrib, common % "test->test;compile->compile")
   .settings(apiSettings:_*)
   .settings(resolvers += Resolver.bintrayRepo("hseeberger", "maven"))
   .settings({
