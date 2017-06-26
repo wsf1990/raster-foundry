@@ -265,6 +265,9 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
           val chip = geotiff.tile
 
+          println(s"RamUsageEstimator.sizeOf(geotiff): ${RamUsageEstimator.sizeOf(geotiff)}")
+          println(s"RamUsageEstimator.sizeOf(chip): ${RamUsageEstimator.sizeOf(chip)}")
+
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
 
