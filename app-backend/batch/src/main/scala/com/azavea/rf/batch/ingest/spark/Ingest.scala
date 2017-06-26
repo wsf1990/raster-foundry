@@ -10,6 +10,7 @@ import com.azavea.rf.batch.util._
 import com.azavea.rf.batch.util.conf.Config
 import com.azavea.rf.common.S3.putObject
 import com.azavea.rf.datamodel.IngestStatus
+
 import geotrellis.raster._
 import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.io._
@@ -25,6 +26,7 @@ import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling._
 import geotrellis.util.{FileRangeReader, RangeReader}
 import geotrellis.vector.ProjectedExtent
+
 import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.model.DeleteObjectsRequest.KeyVersion
 import com.typesafe.scalalogging.LazyLogging
@@ -34,12 +36,12 @@ import org.apache.spark._
 import org.apache.spark.rdd._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
+
 import java.io.File
 import java.net.URI
 import java.util.UUID
 
 import com.carrotsearch.sizeof.RamUsageEstimator
-import geotrellis.raster.reproject.Reproject
 
 object Ingest extends SparkJob with LazyLogging with Config {
   val jobName = "Ingest"
@@ -272,7 +274,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
             println(s"before.cols -> before.rows: ${before.cols -> before.rows}")
             println(s"RamUsageEstimator.sizeOf(before): ${RamUsageEstimator.sizeOf(before)}")
 
-            val band = before.reproject(chipExtent, geotiff.crs, destCRS, Reproject.Options(targetCellSize = Some(source.cellSize)))
+            val band = before.reproject(chipExtent, geotiff.crs, destCRS)
 
             println(s"band.cols -> band.rows: ${band.cols -> band.rows}")
             println(s"RamUsageEstimator.sizeOf(band): ${RamUsageEstimator.sizeOf(band)}")
