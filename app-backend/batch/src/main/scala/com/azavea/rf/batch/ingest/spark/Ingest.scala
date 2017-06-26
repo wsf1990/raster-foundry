@@ -265,7 +265,9 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
           source.bandMaps.map { bm: BandMapping =>
             // GeoTrellis multi-band tiles are 0 indexed
+            println("BEFOREEE")
             val band = maskedChip.band(bm.source - 1).reproject(chipExtent, geotiff.crs, destCRS)
+            println("AFTEEEER")
             (ProjectedExtent(band.extent, destCRS), bm.target - 1) -> band.tile
           }
         }
