@@ -221,6 +221,23 @@ object Ingest extends SparkJob with LazyLogging with Config {
         math.max(params.partitionsPerFile, getSizeFromURI(s.uri, s3Client) / (params.partitionsSize * 1024 * 1024))
       }.sum.toInt
 
+    println(s"repartitionSize: $repartitionSize")
+
+    println(s"COUNT:")
+    println("==========")
+    println(sc.parallelize(layer.sources, layer.sources.length)
+      .flatMap ({ source =>
+        val geotiff = MultibandGeoTiff(
+          byteReader = uriRangReader(source.uri),
+          decompress = false,
+          streaming = true
+        )
+
+        gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
+          .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
+      }).count())
+    println("==========")
+
     // Read source tiles and reproject them to desired CRS
     val sourceTiles: RDD[((ProjectedExtent, Int), Tile)] =
       sc.parallelize(layer.sources, layer.sources.length)
