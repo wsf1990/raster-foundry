@@ -42,6 +42,7 @@ import java.net.URI
 import java.util.UUID
 
 import com.carrotsearch.sizeof.RamUsageEstimator
+import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 
 object Ingest extends SparkJob with LazyLogging with Config {
   val jobName = "Ingest"
@@ -222,23 +223,6 @@ object Ingest extends SparkJob with LazyLogging with Config {
         math.max(params.partitionsPerFile, getSizeFromURI(s.uri, s3Client) / (params.partitionsSize * 1024 * 1024))
       }.sum.toInt
 
-    println(s"repartitionSize: $repartitionSize")
-
-    println(s"COUNT:")
-    println("==========")
-    println(sc.parallelize(layer.sources, layer.sources.length)
-      .flatMap ({ source =>
-        val geotiff = MultibandGeoTiff(
-          byteReader = uriRangReader(source.uri),
-          decompress = false,
-          streaming = true
-        )
-
-        gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
-          .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
-      }).count())
-    println("==========")
-
     // Read source tiles and reproject them to desired CRS
     val sourceTiles: RDD[((ProjectedExtent, Int), Tile)] =
       sc.parallelize(layer.sources, layer.sources.length)
@@ -250,19 +234,26 @@ object Ingest extends SparkJob with LazyLogging with Config {
           )
 
           gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
-            .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
+            .map { chipBounds => (source, chipBounds) }
         })
         .repartition(repartitionSize)
-        .flatMap { case (source, chipExtent) =>
+        .flatMap { case (source, chipBounds) =>
 
-          println(s"(source, chipExtent): ${(source, chipExtent)}")
-
-          val geotiff = MultibandGeoTiff(
-            byteReader = uriRangReader(source.uri),
-            e = Some(chipExtent)
-          )
+          val geotiff = GeoTiffReader
+            .readMultiband(
+              byteReader = uriRangReader(source.uri),
+              decompress = false,
+              streaming = true
+            )
+            .crop(
+              colMin = chipBounds.colMin,
+              rowMin = chipBounds.rowMin,
+              colMax = chipBounds.colMax,
+              rowMax = chipBounds.rowMin
+            )
 
           val chip = geotiff.tile
+          val chipExtent = geotiff.rasterExtent.extentFor(chipBounds)
 
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
