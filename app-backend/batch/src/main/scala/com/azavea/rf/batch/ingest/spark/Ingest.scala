@@ -10,7 +10,6 @@ import com.azavea.rf.batch.util._
 import com.azavea.rf.batch.util.conf.Config
 import com.azavea.rf.common.S3.putObject
 import com.azavea.rf.datamodel.IngestStatus
-
 import geotrellis.raster._
 import geotrellis.raster.histogram.Histogram
 import geotrellis.raster.io._
@@ -25,8 +24,7 @@ import geotrellis.spark.io.s3.util.S3RangeReader
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling._
 import geotrellis.util.{FileRangeReader, RangeReader}
-import geotrellis.vector.ProjectedExtent
-
+import geotrellis.vector.{Extent, ProjectedExtent}
 import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.model.DeleteObjectsRequest.KeyVersion
 import com.typesafe.scalalogging.LazyLogging
@@ -36,13 +34,11 @@ import org.apache.spark._
 import org.apache.spark.rdd._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
-
 import java.io.File
 import java.net.URI
 import java.util.UUID
 
 import com.carrotsearch.sizeof.RamUsageEstimator
-import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 
 object Ingest extends SparkJob with LazyLogging with Config {
   val jobName = "Ingest"
@@ -234,26 +230,19 @@ object Ingest extends SparkJob with LazyLogging with Config {
           )
 
           gridBoundChips(geotiff.tile.gridBounds, params.windowSize, params.windowSize)
-            .map { chipBounds => (source, chipBounds) }
+            .map { chipBounds => (source, geotiff.rasterExtent.extentFor(chipBounds)) }
         })
         .repartition(repartitionSize)
-        .flatMap { case (source, chipBounds) =>
+        .flatMap { case (source, chipExtent) =>
 
-          val geotiff = GeoTiffReader
-            .readMultiband(
-              byteReader = uriRangReader(source.uri),
-              decompress = false,
-              streaming = true
-            )
-            .crop(
-              colMin = chipBounds.colMin,
-              rowMin = chipBounds.rowMin,
-              colMax = chipBounds.colMax,
-              rowMax = chipBounds.rowMin
-            )
+          println(s"(source, chipExtent): ${(source, chipExtent)}")
+
+          val geotiff = MultibandGeoTiff(
+            byteReader = uriRangReader(source.uri),
+            e = Some(chipExtent)
+          )
 
           val chip = geotiff.tile
-          val chipExtent = geotiff.rasterExtent.extentFor(chipBounds)
 
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
@@ -280,7 +269,11 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
     val (maxZoom, tileLayerMetadata) = Ingest.calculateTileLayerMetadata(layer, layoutScheme)
 
-    val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
+    println(s"sourceTiles.partitions.length: ${sourceTiles.partitions.length}")
+    println(s"sourceTiles.count: ${sourceTiles.count}")
+    println(s"(maxZoom, tileLayerMetadata): ${(maxZoom, tileLayerMetadata)}")
+
+    /*val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
       tileLayerMetadata.cellType,
       tileLayerMetadata.layout,
       resampleMethod)
@@ -332,7 +325,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
       writer.write(sharedId, layerRdd)
     }
     attributeStore.write(sharedId, "ingestComplete", true)
-    logger.info("Ingest complete")
+    logger.info("Ingest complete")*/
   }
 
   /** Sample ingest definitions can be found in the accompanying test/resources
