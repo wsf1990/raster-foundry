@@ -42,6 +42,8 @@ import java.io.File
 import java.net.URI
 import java.util.UUID
 
+import com.carrotsearch.sizeof.RamUsageEstimator
+
 object Ingest extends SparkJob with LazyLogging with Config {
   val jobName = "Ingest"
 
@@ -253,6 +255,9 @@ object Ingest extends SparkJob with LazyLogging with Config {
         })
         .repartition(repartitionSize)
         .flatMap { case (source, chipExtent) =>
+
+          println(s"(source, chipExtent): ${(source, chipExtent)}")
+
           val geotiff = MultibandGeoTiff(
             byteReader = uriRangReader(source.uri),
             e = Some(chipExtent)
@@ -263,13 +268,24 @@ object Ingest extends SparkJob with LazyLogging with Config {
           // Set NoData values if a pattern has been specified
           val maskedChip = ndPattern.fold(chip)(mask => mask(chip))
 
-          source.bandMaps.map { bm: BandMapping =>
+          val result = source.bandMaps.map { bm: BandMapping =>
             // GeoTrellis multi-band tiles are 0 indexed
-            println("BEFOREEE")
-            val band = maskedChip.band(bm.source - 1).reproject(chipExtent, geotiff.crs, destCRS)
-            println("AFTEEEER")
+            val before = maskedChip.band(bm.source - 1)
+
+            println(s"before.cols -> before.rows: ${before.cols -> before.rows}")
+            println(s"RamUsageEstimator.sizeOf(before): ${RamUsageEstimator.sizeOf(before)}")
+
+            val band = before.reproject(chipExtent, geotiff.crs, destCRS)
+
+            println(s"band.cols -> band.rows: ${band.cols -> band.rows}")
+            println(s"RamUsageEstimator.sizeOf(band): ${RamUsageEstimator.sizeOf(band)}")
+
             (ProjectedExtent(band.extent, destCRS), bm.target - 1) -> band.tile
           }
+
+          println(s"RamUsageEstimator.sizeOf(result): ${RamUsageEstimator.sizeOf(result)}")
+
+          result
         }
 
     val (maxZoom, tileLayerMetadata) = Ingest.calculateTileLayerMetadata(layer, layoutScheme)
