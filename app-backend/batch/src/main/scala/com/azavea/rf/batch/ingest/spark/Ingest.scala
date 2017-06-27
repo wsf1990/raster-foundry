@@ -284,7 +284,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
     println(s"tiledRdd.filter(!_._2.isNoDataTile).count: ${tiledRdd.filter(!_._2.isNoDataTile).count}")
 
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
-    val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
+    /*val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
       .map { case ((key, band), tile) => key -> (tile, band) }
       .groupByKey
       .map { case (key, tiles) =>
@@ -330,7 +330,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
       writer.write(sharedId, layerRdd)
     }
     attributeStore.write(sharedId, "ingestComplete", true)
-    logger.info("Ingest complete")
+    logger.info("Ingest complete")*/
   }
 
   /** Sample ingest definitions can be found in the accompanying test/resources
