@@ -284,7 +284,8 @@ object Ingest extends SparkJob with LazyLogging with Config {
     //println(s"tiledRdd.filter(!_._2.isNoDataTile).count: ${tiledRdd.filter(!_._2.isNoDataTile).count}")
 
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
-    val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
+
+    /*val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
       .map { case ((key, band), tile) => key -> (tile, band) }
       .combineByKey(createTiles[(Tile, Int)], mergeTiles1[(Tile, Int)], mergeTiles2[(Tile, Int)])
       .map { case (key, tiles) =>
@@ -295,10 +296,31 @@ object Ingest extends SparkJob with LazyLogging with Config {
           for (band <- 0 until bandCount) yield
             arr.find(_._2 == band).map(_._1).getOrElse(emptyTile)
         key -> MultibandTile(bands)
-      }
+      }*/
+
+
+    val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
+      .map { case ((key, band), tile) => key -> (MultibandTile(tile), band) }
+      .sortBy({ case (_, (_, band)) => band }, numPartitions = tiledRdd.partitions.length )
+      .map { case (key, (tile, _)) => key -> tile }
+      .reduceByKey { case (acc, tile) => MultibandTile(acc.bands ++ tile.bands) }
+
+    /*val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
+      .map { case ((key, band), tile) => key -> (tile, band) }
+      .groupByKey(tiledRdd.partitions.length)
+      .map { case (key, tiles) =>
+        val prototype: Tile = tiles.head._1
+        val emptyTile: Tile = ArrayTile.empty(prototype.cellType, prototype.cols, prototype.rows)
+        val arr = tiles.toArray
+        val bands: Seq[Tile] =
+          for (band <- 0 until bandCount) yield
+            arr.find(_._2 == band).map(_._1).getOrElse(emptyTile)
+        key -> MultibandTile(bands)
+      }*/
 
     val layerRdd = ContextRDD(multibandTiledRdd, tileLayerMetadata)
-    
+
+
     println(s"layerRdd.partitions.length: ${layerRdd.partitions.length}")
     println(s"layerRdd.count: ${layerRdd.count}")
     /*val (writer, deleter, attributeStore) = getRfLayerManagement(layer.output)
