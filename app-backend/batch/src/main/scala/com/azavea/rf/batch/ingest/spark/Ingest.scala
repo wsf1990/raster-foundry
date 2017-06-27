@@ -302,7 +302,6 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
     println(s"layerRdd.partitions.length: ${layerRdd.partitions.length}")
     println(s"layerRdd.count: ${layerRdd.count}")
-    println(s"layerRdd.filter(!_._2.isNoDataTile).count: ${layerRdd.filter(!_._2.isNoDataTile).count}")
     /*val (writer, deleter, attributeStore) = getRfLayerManagement(layer.output)
 
     val sharedId = LayerId(layer.id.toString, 0)
