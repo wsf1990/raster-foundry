@@ -286,7 +286,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
     val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
       .map { case ((key, band), tile) => key -> (tile, band) }
-      .groupByKey
+      .groupByKey(tiledRdd.partitions.length)
       .map { case (key, tiles) =>
         val prototype: Tile = tiles.head._1
         val emptyTile: Tile = ArrayTile.empty(prototype.cellType, prototype.cols, prototype.rows)
