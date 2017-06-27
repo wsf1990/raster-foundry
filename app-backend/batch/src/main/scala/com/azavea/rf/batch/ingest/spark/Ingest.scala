@@ -279,14 +279,14 @@ object Ingest extends SparkJob with LazyLogging with Config {
       resampleMethod
     )
 
-    println(s"tiledRdd.partitions.length: ${tiledRdd.partitions.length}")
-    println(s"tiledRdd.count: ${tiledRdd.count}")
-    println(s"tiledRdd.filter(!_._2.isNoDataTile).count: ${tiledRdd.filter(!_._2.isNoDataTile).count}")
+    //println(s"tiledRdd.partitions.length: ${tiledRdd.partitions.length}")
+    //println(s"tiledRdd.count: ${tiledRdd.count}")
+    //println(s"tiledRdd.filter(!_._2.isNoDataTile).count: ${tiledRdd.filter(!_._2.isNoDataTile).count}")
 
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
     val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
       .map { case ((key, band), tile) => key -> (tile, band) }
-      .groupByKey(tiledRdd.partitions.length)
+      .combineByKey(createTiles[(Tile, Int)], mergeTiles1[(Tile, Int)], mergeTiles2[(Tile, Int)])
       .map { case (key, tiles) =>
         val prototype: Tile = tiles.head._1
         val emptyTile: Tile = ArrayTile.empty(prototype.cellType, prototype.cols, prototype.rows)
@@ -298,8 +298,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
       }
 
     val layerRdd = ContextRDD(multibandTiledRdd, tileLayerMetadata)
-
-
+    
     println(s"layerRdd.partitions.length: ${layerRdd.partitions.length}")
     println(s"layerRdd.count: ${layerRdd.count}")
     /*val (writer, deleter, attributeStore) = getRfLayerManagement(layer.output)
