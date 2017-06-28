@@ -17,4 +17,7 @@ trait Config {
 
   lazy val defaultBucket: String =
     config.getString("bucket")
+
+  lazy val withCaching: Boolean =
+    ConfigFactory.load().getConfig("cache").getBoolean("enabled")
 }

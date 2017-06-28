@@ -6,7 +6,6 @@ import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.{MosaicDefinition, WhiteBalance}
 import com.azavea.rf.common.cache._
 
-import com.github.blemale.scaffeine.{ Cache => ScaffeineCache, Scaffeine }
 import geotrellis.raster._
 import geotrellis.raster.io._
 import geotrellis.spark._

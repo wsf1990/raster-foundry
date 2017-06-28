@@ -23,8 +23,6 @@ import geotrellis.vector.io._
 import geotrellis.spark.io._
 import geotrellis.spark._
 import geotrellis.proj4._
-import geotrellis.spark.io.s3.{S3InputFormat, S3AttributeStore, S3CollectionLayerReader, S3ValueReader}
-import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import geotrellis.vector.Extent
 import com.typesafe.scalalogging.LazyLogging
 import spray.json.DefaultJsonProtocol._

@@ -3,13 +3,14 @@ package com.azavea.rf.common.cache
 import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import net.spy.memcached._
 import cats.data._
+
 import scala.concurrent._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-
 import java.util.concurrent.Executors
 
 import com.azavea.rf.common.Config
+import com.typesafe.config.ConfigFactory
 
 
 /**
@@ -34,10 +35,11 @@ class HeapBackedMemcachedClient(
 
 
   /** Clear the specified value within this cache */
-  def delete(key: String) = {
-    client.delete(key)
-    onHeapCache.invalidate(key)
-  }
+  def delete(key: String) =
+    if(options.enabled) {
+      client.delete(key)
+      onHeapCache.invalidate(key)
+    }
 
 
   /**
@@ -61,18 +63,22 @@ class HeapBackedMemcachedClient(
     * @return the current (existing or computed) value associated with the specified key
     */
   def caching[T](cacheKey: String)(mappingFunction: ExecutionContext => Future[T]): Future[T] = {
-    val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
-    onHeapCache.get(sanitizedKey, { key: String =>
-      client.getOrElseUpdate[T](key, mappingFunction(options.ec), options.memcachedTTL)(options.ec)
-    }).asInstanceOf[Future[T]]
+    if(options.enabled) {
+      val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
+      onHeapCache.get(sanitizedKey, { key: String =>
+        client.getOrElseUpdate[T](key, mappingFunction(options.ec), options.memcachedTTL)(options.ec)
+      }).asInstanceOf[Future[T]]
+    } else mappingFunction(options.ec)
   }
 
   def cachingOptionT[T](cacheKey: String)(mappingFunction: ExecutionContext => OptionT[Future, T]): OptionT[Future, T] = {
-    val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
-    val futureOption = onHeapCache.get(sanitizedKey, { key: String =>
-      client.getOrElseUpdate[Option[T]](key, mappingFunction(options.ec).value, options.memcachedTTL)(options.ec)
-    }).asInstanceOf[Future[Option[T]]]
-    OptionT(futureOption)
+    if(options.enabled) {
+      val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
+      val futureOption = onHeapCache.get(sanitizedKey, { key: String =>
+        client.getOrElseUpdate[Option[T]](key, mappingFunction(options.ec).value, options.memcachedTTL)(options.ec)
+      }).asInstanceOf[Future[Option[T]]]
+      OptionT(futureOption)
+    } else mappingFunction(options.ec)
   }
 
 }
@@ -94,7 +100,8 @@ object HeapBackedMemcachedClient {
     ec: ExecutionContext = defaultExecutionContext,
     heapTTL: FiniteDuration = Config.memcached.heapEntryTTL,
     memcachedTTL: FiniteDuration = Config.memcached.ttl,
-    maxSize: Int = Config.memcached.heapMaxEntries
+    maxSize: Int = Config.memcached.heapMaxEntries,
+    enabled: Boolean = Config.cache.enabled
   )
 
   def apply(client: MemcachedClient, options: Options = Options()) =

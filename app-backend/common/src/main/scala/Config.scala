@@ -35,4 +35,10 @@ object Config {
     lazy val heapMaxEntries: Int =
       memcachedConfig.getInt("heap.max-entries")
   }
+
+  object cache {
+    private lazy val cacheConfig = config.getConfig("cache")
+    lazy val enabled: Boolean =
+      cacheConfig.getBoolean("emabled")
+  }
 }
