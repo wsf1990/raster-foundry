@@ -10,7 +10,6 @@ import scala.concurrent.duration._
 import java.util.concurrent.Executors
 
 import com.azavea.rf.common.Config
-import com.typesafe.config.ConfigFactory
 
 
 /**
@@ -21,13 +20,13 @@ import com.typesafe.config.ConfigFactory
   *         cache (a guava-inspired java library).
   */
 class HeapBackedMemcachedClient(
-  client: MemcachedClient,
+  client: => MemcachedClient,
   options: HeapBackedMemcachedClient.Options = HeapBackedMemcachedClient.Options()) {
 
   /** The caffeine cache (on heap) which prevents cache race conditions.
    * Entries on this cache are intended to live only long enough to satisfy requests from a "stampeding heard".
    */
-  private val onHeapCache: ScaffeineCache[String, Future[Any]] =
+  private lazy val onHeapCache: ScaffeineCache[String, Future[Any]] =
     Scaffeine()
       .expireAfterAccess(Config.memcached.heapEntryTTL)
       .maximumSize(Config.memcached.heapMaxEntries)
