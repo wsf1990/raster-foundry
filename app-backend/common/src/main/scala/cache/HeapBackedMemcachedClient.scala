@@ -20,7 +20,7 @@ import com.azavea.rf.common.Config
   *         cache (a guava-inspired java library).
   */
 class HeapBackedMemcachedClient(
-  client: => MemcachedClient,
+  client: MemcachedClient,
   options: HeapBackedMemcachedClient.Options = HeapBackedMemcachedClient.Options()) {
 
   /** The caffeine cache (on heap) which prevents cache race conditions.
