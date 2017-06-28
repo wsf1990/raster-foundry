@@ -39,6 +39,6 @@ object Config {
   object cache {
     private lazy val cacheConfig = config.getConfig("cache")
     lazy val enabled: Boolean =
-      cacheConfig.getBoolean("emabled")
+      cacheConfig.getBoolean("enabled")
   }
 }
