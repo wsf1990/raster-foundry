@@ -71,12 +71,12 @@ object LayerCache extends Config with LazyLogging {
       .build[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]]
 
   def layerUri(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, String] =
-    layerUriCache.get(layerId, _ => blocking {
+    layerUriCache.take(layerId, _ => blocking {
       OptionT(Scenes.getSceneForCaching(layerId).map(_.flatMap(_.ingestLocation)))
     })
 
   def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, (AttributeStore, Map[String, Int])] =
-    attributeStoreCache.get(layerId, _ =>
+    attributeStoreCache.take(layerId, _ =>
       layerUri(layerId).mapFilter { catalogUri =>
         for (result <- S3InputFormat.S3UrlRx.findFirstMatchIn(catalogUri)) yield {
           val bucket = result.group("bucket")
