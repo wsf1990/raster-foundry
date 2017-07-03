@@ -18,7 +18,7 @@ package object tile {
   }
 
   implicit class withLayerCacheMethods[K, V](cache: ScaffeineCache[K, V]) extends Config {
-    def take(key: K, mappingFunction: K => V)(ec: ExecutionContext): V = {
+    def take(key: K, mappingFunction: K => V)(implicit ec: ExecutionContext): V = {
       if (withCaching) {
         cache.getIfPresent(key) match {
           case Some(v) => v
