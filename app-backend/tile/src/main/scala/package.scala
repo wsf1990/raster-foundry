@@ -3,9 +3,8 @@ package com.azavea.rf
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import com.github.blemale.scaffeine.{Cache => ScaffeineCache}
-import java.util.UUID
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.util.UUID
 
 package object tile {
   implicit object UUIDJsonFormat extends RootJsonFormat[UUID] {
@@ -18,17 +17,8 @@ package object tile {
   }
 
   implicit class withLayerCacheMethods[K, V](cache: ScaffeineCache[K, V]) extends Config {
-    def take(key: K, mappingFunction: K => V)(implicit ec: ExecutionContext): V = {
-      if (withCaching) {
-        cache.getIfPresent(key) match {
-          case Some(v) => v
-          case _ => {
-            Future { cache.get(key, mappingFunction) }
-            mappingFunction(key)
-          }
-        }
-      }
+    def take(key: K, mappingFunction: K => V): V =
+      if (withCaching) cache.get(key, mappingFunction)
       else mappingFunction(key)
-    }
   }
 }
