@@ -18,19 +18,19 @@ import geotrellis.raster._
 import geotrellis.raster.render._
 import geotrellis.raster.histogram._
 import geotrellis.raster.io._
-import geotrellis.spark.io._
+import geotrellis.spark.io.{Reader, _}
+import geotrellis.spark.io
 import geotrellis.spark._
-import geotrellis.spark.io.s3.{S3InputFormat, S3AttributeStore, S3CollectionLayerReader, S3ValueReader}
-
-import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
+import geotrellis.spark.io.s3.{S3AttributeStore, S3CollectionLayerReader, S3InputFormat, S3ValueReader}
 import geotrellis.vector.Extent
+import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import com.typesafe.scalalogging.LazyLogging
 import spray.json.DefaultJsonProtocol._
-import kamon.trace.Tracer
 import cats.data._
 import cats.implicits._
 
 import java.util.UUID
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -68,6 +68,20 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       .maximumSize(500)
       .build[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]]
 
+  private val readerCache: ScaffeineCache[LayerId, io.Reader[SpatialKey, MultibandTile]] =
+    Scaffeine()
+      .recordStats()
+      .expireAfterAccess(5.minutes)
+      .maximumSize(500)
+      .build[LayerId, io.Reader[SpatialKey, MultibandTile]]
+
+  private val layerReaderCache: ScaffeineCache[LayerId, BoundLayerQuery[SpatialKey, TileLayerMetadata[SpatialKey], MultibandTileLayerCollection[SpatialKey]]] =
+    Scaffeine()
+      .recordStats()
+      .expireAfterAccess(5.minutes)
+      .maximumSize(500)
+      .build[LayerId, BoundLayerQuery[SpatialKey, TileLayerMetadata[SpatialKey], MultibandTileLayerCollection[SpatialKey]]]
+
   def layerUri(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, String] =
     traceName(s"LayerCache.layerUri($layerId)") {
       layerUriCache.take(layerId, _ => blocking {
@@ -98,6 +112,24 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       )
     }
 
+  def readerForLayer(layerId: LayerId, store: AttributeStore)(implicit ec: ExecutionContext): Reader[SpatialKey, MultibandTile] =
+    traceName(s"LayerCache.valueReaderForLayer($layerId)") {
+      readerCache.take(layerId, _ => blocking {
+        traceName(s"LayerCache.valueReaderForLayer($layerId) (no cache)") {
+          new S3ValueReader(store).reader[SpatialKey, MultibandTile](layerId)
+        }
+      })
+    }
+
+  def layerReaderForLayer(layerId: LayerId, store: AttributeStore)(implicit ec: ExecutionContext): BoundLayerQuery[SpatialKey, TileLayerMetadata[SpatialKey], MultibandTileLayerCollection[SpatialKey]] =
+    traceName(s"LayerCache.layerReaderForLayer($layerId)") {
+      layerReaderCache.take(layerId, _ => blocking {
+        traceName(s"LayerCache.layerReaderForLayer($layerId) (no cache)") {
+          S3CollectionLayerReader(store).query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
+        }
+      })
+    }
+
   def layerHistogram(layerId: UUID, zoom: Int): OptionT[Future, Array[Histogram[Double]]] =
     traceName(s"LayerCache.layerHistogram($layerId)") {
       histogramCache.cachingOptionT(s"histogram-$layerId-$zoom") { implicit ec =>
@@ -113,7 +145,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     traceName(s"LayerCache.layerTile($layerId)") {
       tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
         attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
-          val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
+          val reader = readerForLayer(LayerId(layerId.toString, zoom), store)
           blocking {
             traceName(s"LayerCache.layerTile($layerId) (no cache)") {
               Try {
@@ -138,8 +170,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
           blocking {
             traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
               Try {
-                S3CollectionLayerReader(store)
-                  .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(layerId.toString, zoom))
+                layerReaderForLayer(LayerId(layerId.toString, zoom), store)
                   .where(Intersects(extent))
                   .result
                   .stitch
