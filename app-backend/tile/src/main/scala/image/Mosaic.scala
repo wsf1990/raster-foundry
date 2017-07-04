@@ -20,6 +20,8 @@ import kamon.trace.Tracer
 import java.util.UUID
 
 import com.azavea.rf.tile.util.TimingLogging
+import geotrellis.spark.io.AttributeStore.Fields
+import spray.json.JsValue
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
@@ -40,7 +42,14 @@ object Mosaic extends KamonTrace with TimingLogging {
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
           blocking {
-            z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") { store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z)) }
+            z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
+              store
+                .read[JsValue](LayerId(layerName, z), Fields.metadataBlob)
+                .asJsObject
+                .fields(Fields.metadata)
+                .convertTo[TileLayerMetadata[SpatialKey]]
+              //store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
+            }
           }
         }
       }
