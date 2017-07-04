@@ -82,15 +82,16 @@ object Mosaic extends KamonTrace with TimingLogging {
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] =
     traceName(s"Mosaic.tileLayerMetadata($id)") {
       LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
-        val psqlStore = PostgresAttributeStore()
-        val s3Store = store.asInstanceOf[S3AttributeStore]
+        //val psqlStore = PostgresAttributeStore()
+        //val s3Store = store.asInstanceOf[S3AttributeStore]
 
         // because metadata attributes are cached in AttributeStore itself, there is no point caching this function
         val layerName = id.toString
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
 
-          for {
+          // TODO: remove that migration code
+          /*for {
             zz <- 1 to maxZoom
           } yield {
             val lid = LayerId(layerName, zz)
@@ -105,7 +106,7 @@ object Mosaic extends KamonTrace with TimingLogging {
           psqlStore.write(zlid, "histogram", s3Store.read[Array[Histogram[Double]]](zlid, "histogram"))
           psqlStore.write(zlid, "extent", s3Store.read[Extent](zlid, "extent")(ExtentJsonFormat))(ExtentJsonFormat)
           psqlStore.write(zlid, "crs", s3Store.read[CRS](zlid, "crs")(CRSJsonFormat))(CRSJsonFormat)
-          psqlStore.write(zlid, "layerComplete", true)
+          psqlStore.write(zlid, "layerComplete", true)*/
 
           blocking {
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
