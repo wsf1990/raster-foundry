@@ -69,21 +69,25 @@ object Mosaic extends KamonTrace with TimingLogging {
   def fetch(id: UUID, zoom: Int, col: Int, row: Int)(implicit database: Database): OptionT[Future, MultibandTile] =
     traceName(s"Mosaic.fetch($id)") {
       tileLayerMetadata(id, zoom).flatMap { case (sourceZoom, tlm) =>
+        printCurrentTime(10)
         val zoomDiff = zoom - sourceZoom
         val resolutionDiff = 1 << zoomDiff
         val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
         if (tlm.bounds.includes(sourceKey)) {
           LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
+            printCurrentTime(11)
             val innerCol = col % resolutionDiff
             val innerRow = row % resolutionDiff
             val cols = tile.cols / resolutionDiff
             val rows = tile.rows / resolutionDiff
-            tile.crop(GridBounds(
+            val res = tile.crop(GridBounds(
               colMin = innerCol * cols,
               rowMin = innerRow * rows,
               colMax = (innerCol + 1) * cols - 1,
               rowMax = (innerRow + 1) * rows - 1
             )).resample(256, 256)
+            printCurrentTime(12)
+            res
           }
         } else {
           OptionT.none[Future, MultibandTile]
