@@ -86,10 +86,10 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
         layerUri(layerId).mapFilter { catalogUri =>
           traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
             printCurrentTime(21)
-            //val uri = new AmazonS3URI(catalogUri)
-            //val (bucket, prefix) = uri.getBucket -> uri.getKey
+            val uri = new AmazonS3URI(catalogUri)
+            val (bucket, prefix) = uri.getBucket -> uri.getKey
             // TODO: Decide if we should verify URI is valid. This may be a store that always fails to read
-            val store = PostgresAttributeStore()
+            //val store = PostgresAttributeStore()
             val maxZooms: Map[String, Int] = blocking {
               store.layerIds.groupBy(_.name).map { case (k, v) => k -> v.map(_.zoom).max }
             }
