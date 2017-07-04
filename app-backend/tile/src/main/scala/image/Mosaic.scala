@@ -5,7 +5,6 @@ import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.{MosaicDefinition, WhiteBalance}
 import com.azavea.rf.common.cache._
-
 import geotrellis.raster._
 import geotrellis.raster.io._
 import geotrellis.spark._
@@ -13,13 +12,15 @@ import geotrellis.spark.io._
 import geotrellis.raster.GridBounds
 import geotrellis.proj4._
 import geotrellis.slick.Projected
-import geotrellis.vector.{Polygon, Extent}
+import geotrellis.vector.{Extent, Polygon}
 import geotrellis.vector.io._
 import cats.data._
 import cats.implicits._
 import kamon.trace.Tracer
-
 import java.util.UUID
+
+import com.azavea.rf.tile.util.TimingLogging
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -27,7 +28,7 @@ import scala.concurrent.duration._
 
 case class TagWithTTL(tag: String, ttl: Duration)
 
-object Mosaic extends KamonTrace {
+object Mosaic extends KamonTrace with TimingLogging {
   lazy val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
@@ -39,7 +40,7 @@ object Mosaic extends KamonTrace {
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
           blocking {
-            z -> store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
+            z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") { store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z)) }
           }
         }
       }
