@@ -66,7 +66,7 @@ object Mosaic extends KamonTrace with TimingLogging {
         val resolutionDiff = 1 << zoomDiff
         val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
         if (tlm.bounds.includes(sourceKey)) {
-          timedCreate("LayerCache", s"fetch($id, $zoom) start", s"fetch($id, $zoom) finish") { LayerCache.layerTile(id, sourceZoom, sourceKey) }.map { tile =>
+          timedCreate("Mosaic", s"fetch($id, $zoom) start", s"fetch($id, $zoom) finish") { LayerCache.layerTile(id, sourceZoom, sourceKey) }.map { tile =>
             val innerCol = col % resolutionDiff
             val innerRow = row % resolutionDiff
             val cols = tile.cols / resolutionDiff
