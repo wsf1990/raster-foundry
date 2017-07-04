@@ -21,7 +21,8 @@ import java.util.UUID
 
 import com.azavea.rf.tile.util.TimingLogging
 import geotrellis.spark.io.AttributeStore.Fields
-import spray.json.JsValue
+import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
