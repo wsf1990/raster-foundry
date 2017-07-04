@@ -254,7 +254,13 @@ object Mosaic extends KamonTrace with TimingLogging {
             List(Mosaic.fetch(sceneId, zoom, col, row).value)
           }
         }
-        Future.sequence(tiles).map(_.flatten)
+        val res = Future.sequence(tiles).map(_.flatten)
+
+        res onComplete {
+          case _ => printCurrentTime(8)
+        }
+
+        res
       }
 
       val futureMergeTile =
