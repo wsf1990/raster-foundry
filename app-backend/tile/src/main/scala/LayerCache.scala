@@ -12,7 +12,6 @@ import com.azavea.rf.common.cache._
 import com.azavea.rf.common.cache.kryo.KryoMemcachedClient
 import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables._
-
 import io.circe.syntax._
 import geotrellis.raster._
 import geotrellis.raster.render._
@@ -20,8 +19,7 @@ import geotrellis.raster.histogram._
 import geotrellis.raster.io._
 import geotrellis.spark.io._
 import geotrellis.spark._
-import geotrellis.spark.io.s3.{S3InputFormat, S3AttributeStore, S3CollectionLayerReader, S3ValueReader}
-
+import geotrellis.spark.io.s3.{S3AttributeStore, S3CollectionLayerReader, S3InputFormat, S3ValueReader}
 import com.github.blemale.scaffeine.{Scaffeine, Cache => ScaffeineCache}
 import geotrellis.vector.Extent
 import com.typesafe.scalalogging.LazyLogging
@@ -29,8 +27,10 @@ import spray.json.DefaultJsonProtocol._
 import kamon.trace.Tracer
 import cats.data._
 import cats.implicits._
-
 import java.util.UUID
+
+import com.azavea.rf.tile.util.TimingLogging
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -46,7 +46,7 @@ import scala.util._
   * Things that are cheap to construct but contain internal state we want to re-use use LoadingCache.
   * things that require time to generate, usually a network fetch, use AsyncLoadingCache
   */
-object LayerCache extends Config with LazyLogging with KamonTrace {
+object LayerCache extends Config with LazyLogging with KamonTrace with TimingLogging {
   implicit val database = Database.DEFAULT
 
   lazy val memcachedClient = KryoMemcachedClient.DEFAULT
@@ -113,11 +113,11 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     traceName(s"LayerCache.layerTile($layerId)") {
       tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
         attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
-          val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
+          val reader = timedCreate("LayerCache", s"layerTile($layerId, $zoom) reader start", s"layerTile($layerId, $zoom) reader finish") { new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom)) }
           blocking {
             traceName(s"LayerCache.layerTile($layerId) (no cache)") {
               Try {
-                reader.read(key)
+                timedCreate("LayerCache", s"layerTile($layerId, $zoom) read($key) start", s"layerTile($layerId, $zoom) read($key) finish") { reader.read(key) }
               } match {
                 case Success(tile) => Option(tile)
                 case Failure(e: ValueNotFoundError) => None
