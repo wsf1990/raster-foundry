@@ -54,7 +54,7 @@ object Mosaic extends KamonTrace with TimingLogging {
       }
 
       memcached.cachingOptionT(cacheKey) { _ =>
-        OptionT(ScenesToProjects.getMosaicDefinition(projectId))
+        OptionT(timedCreate("Mosaic", s"mosaicDefinition($projectId) start", s"mosaicDefinition($projectId) finish") { ScenesToProjects.getMosaicDefinition(projectId) })
       }
     }
 
@@ -66,7 +66,7 @@ object Mosaic extends KamonTrace with TimingLogging {
         val resolutionDiff = 1 << zoomDiff
         val sourceKey = SpatialKey(col / resolutionDiff, row / resolutionDiff)
         if (tlm.bounds.includes(sourceKey)) {
-          timedCreate("Mosaic", s"fetch($id, $zoom) start", s"fetch($id, $zoom) finish") { LayerCache.layerTile(id, sourceZoom, sourceKey) }.map { tile =>
+          LayerCache.layerTile(id, sourceZoom, sourceKey).map { tile =>
             val innerCol = col % resolutionDiff
             val innerRow = row % resolutionDiff
             val cols = tile.cols / resolutionDiff
@@ -224,7 +224,7 @@ object Mosaic extends KamonTrace with TimingLogging {
           if (rgbOnly) {
             maybeColorCorrectParams.map { colorCorrectParams =>
               Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
-                LayerCache.layerHistogram(sceneId, zoom).map { hist =>
+                timedCreate("Mosaic", s"layerHistogram($sceneId, $zoom) start", s"layerHistogram($sceneId, $zoom) finish") { LayerCache.layerHistogram(sceneId, zoom) }.map { hist =>
                   colorCorrectParams.colorCorrect(tile, hist)
                 }
               }.value
