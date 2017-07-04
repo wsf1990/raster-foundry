@@ -42,15 +42,15 @@ object Mosaic extends KamonTrace with TimingLogging {
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] =
     traceName(s"Mosaic.tileLayerMetadata($id)") {
       LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
-        val psqlStore = PostgresAttributeStore()
-        val s3Store = store.asInstanceOf[S3AttributeStore]
+        /*val psqlStore = PostgresAttributeStore()
+        val s3Store = store.asInstanceOf[S3AttributeStore]*/
 
         // because metadata attributes are cached in AttributeStore itself, there is no point caching this function
         val layerName = id.toString
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
 
-          for {
+          /*for {
             zz <- 1 to maxZoom
           } yield {
             val lid = LayerId(layerName, zz)
@@ -59,7 +59,7 @@ object Mosaic extends KamonTrace with TimingLogging {
             psqlStore.write(lid, Fields.metadata, md)
             psqlStore.write(lid, Fields.keyIndex, ki)
             psqlStore.write(lid, Fields.schema, s)
-          }
+          }*/
 
           blocking {
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
