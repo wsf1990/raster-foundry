@@ -29,6 +29,7 @@ import cats.data._
 import cats.implicits._
 import java.util.UUID
 
+import com.amazonaws.services.s3.AmazonS3URI
 import com.azavea.rf.tile.util.TimingLogging
 
 import scala.concurrent._
@@ -84,9 +85,12 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
         layerUri(layerId).mapFilter { catalogUri =>
           traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
             printCurrentTime(21)
-            for (result <- S3InputFormat.S3UrlRx.findFirstMatchIn(catalogUri)) yield {
-              val bucket = result.group("bucket")
-              val prefix = result.group("prefix")
+            val uri = new AmazonS3URI(catalogUri)
+            val (bucket, prefix) = uri.getBucket -> uri.getKey
+
+            //for (result <- S3InputFormat.S3UrlRx.findFirstMatchIn(catalogUri)) yield {
+              //val bucket = result.group("bucket")
+              //val prefix = result.group("prefix")
               // TODO: Decide if we should verify URI is valid. This may be a store that always fails to read
 
               val store = S3AttributeStore(bucket, prefix)
@@ -94,8 +98,8 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
                 store.layerIds.groupBy(_.name).mapValues(_.map(_.zoom).max)
               }
               printCurrentTime(22)
-              (store, maxZooms)
-            }
+              (store, maxZooms).some
+            //}
           }
         }
       )
