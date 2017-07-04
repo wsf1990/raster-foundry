@@ -40,9 +40,7 @@ object Mosaic extends KamonTrace with TimingLogging {
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
           blocking {
-            val res = z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") { store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z)) }
-            printBuffer("Mosaic")
-            res
+            z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") { store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z)) }
           }
         }
       }
@@ -244,6 +242,10 @@ object Mosaic extends KamonTrace with TimingLogging {
           doColorCorrect <- hasColorCorrection(projectId)
           tiles <- futureTiles
         } yield colorCorrectAndMergeTiles(tiles, doColorCorrect)
+
+      futureMergeTile onComplete {
+        case _ => printBuffer("Mosaic")
+      }
 
       OptionT(futureMergeTile)
     }
