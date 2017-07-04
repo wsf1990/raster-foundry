@@ -83,6 +83,8 @@ object MosaicRoutes extends LazyLogging with KamonTraceDirectives {
           parameter("tag".?) { tag =>
             get {
               complete {
+                printCurrentTime(1)
+
                 val future =
                   Mosaic(projectId, zoom, x, y, tag)
                     .map(_.renderPng)

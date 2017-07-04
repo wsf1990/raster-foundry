@@ -45,31 +45,8 @@ object Mosaic extends KamonTrace with TimingLogging {
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
           blocking {
-            timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) just read start", s"tileLayerMetadata($id, $zoom) just read finish") {
-              val lid = LayerId(layerName, z)
-              val s3store = store.asInstanceOf[S3AttributeStore]
-              val s3Client = s3store.s3Client
-              val (bucket, key) = s3store.bucket -> s3store.attributePath(lid, Fields.metadataBlob)
-              val is = s3Client.getObject(bucket, key).getObjectContent
-              val str = try {
-                IOUtils.toString(is)
-              } finally is.close
-
-              str
-                .parseJson
-                .convertTo[(LayerId, JsValue)]._2
-                .asJsObject
-                .fields(Fields.metadata)
-                .convertTo[TileLayerMetadata[SpatialKey]]
-            }
-
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
-              store
-                .read[JsValue](LayerId(layerName, z), Fields.metadataBlob)
-                .asJsObject
-                .fields(Fields.metadata)
-                .convertTo[TileLayerMetadata[SpatialKey]]
-              //store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
+              store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
             }
           }
         }
@@ -245,6 +222,7 @@ object Mosaic extends KamonTrace with TimingLogging {
   )(
     implicit database: Database
   ): OptionT[Future, MultibandTile] = traceName(s"Mosaic.apply($projectId)") {
+    printCurrentTime(2)
     // Lookup project definition
     // tag present, include in lookup to re-use cache
     // no tag to control cache rollover, so don't cache
