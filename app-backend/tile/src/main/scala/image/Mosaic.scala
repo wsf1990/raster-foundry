@@ -19,7 +19,7 @@ import cats.implicits._
 import kamon.trace.Tracer
 import java.util.UUID
 
-import com.amazonaws.util.IOUtils
+import org.apache.commons.io.IOUtils
 import com.azavea.rf.tile.util.TimingLogging
 import geotrellis.spark.io.AttributeStore.Fields
 import geotrellis.spark.io.s3.{S3AttributeStore, S3Client}
