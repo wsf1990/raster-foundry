@@ -89,6 +89,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
             val uri = new AmazonS3URI(catalogUri)
             val (bucket, prefix) = uri.getBucket -> uri.getKey
             // TODO: Decide if we should verify URI is valid. This may be a store that always fails to read
+            val store = S3AttributeStore(bucket, prefix)
             //val store = PostgresAttributeStore()
             val maxZooms: Map[String, Int] = blocking {
               store.layerIds.groupBy(_.name).map { case (k, v) => k -> v.map(_.zoom).max }
