@@ -79,9 +79,11 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
 
   def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, (AttributeStore, Map[String, Int])] =
     traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
+      printCurrentTime(20)
       attributeStoreCache.take(layerId, _ =>
         layerUri(layerId).mapFilter { catalogUri =>
           traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
+            printCurrentTime(21)
             for (result <- S3InputFormat.S3UrlRx.findFirstMatchIn(catalogUri)) yield {
               val bucket = result.group("bucket")
               val prefix = result.group("prefix")
@@ -91,6 +93,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
               val maxZooms: Map[String, Int] = blocking {
                 store.layerIds.groupBy(_.name).mapValues(_.map(_.zoom).max)
               }
+              printCurrentTime(22)
               (store, maxZooms)
             }
           }
