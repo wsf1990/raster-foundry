@@ -51,7 +51,7 @@ object Mosaic extends KamonTrace with TimingLogging {
           val z = if (zoom > maxZoom) maxZoom else zoom
 
           for {
-            zz <- 0 to maxZoom
+            zz <- 1 to maxZoom
           } yield {
             val lid = LayerId(layerName, zz)
             val LayerAttributes(h, md, ki, s) = s3Store.readLayerAttributes[S3LayerHeader, TileLayerMetadata[SpatialKey], SpatialKey](lid)
