@@ -9,6 +9,8 @@ import geotrellis.raster._
 import geotrellis.raster.io._
 import geotrellis.spark._
 import geotrellis.spark.io._
+import geotrellis.spark.io.postgres.PostgresAttributeStore
+import geotrellis.spark.io.s3._
 import geotrellis.raster.GridBounds
 import geotrellis.proj4._
 import geotrellis.slick.Projected
@@ -40,10 +42,25 @@ object Mosaic extends KamonTrace with TimingLogging {
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] =
     traceName(s"Mosaic.tileLayerMetadata($id)") {
       LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
+        val psqlStore = PostgresAttributeStore()
+        val s3Store = store.asInstanceOf[S3AttributeStore]
+
         // because metadata attributes are cached in AttributeStore itself, there is no point caching this function
         val layerName = id.toString
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
+
+          for {
+            zz <- 0 to maxZoom
+          } yield {
+            val lid = LayerId(layerName, zz)
+            val LayerAttributes(h, md, ki, s) = s3Store.readLayerAttributes[S3LayerHeader, TileLayerMetadata[SpatialKey], SpatialKey](lid)
+            psqlStore.write(lid, Fields.header, h)
+            psqlStore.write(lid, Fields.metadata, md)
+            psqlStore.write(lid, Fields.keyIndex, ki)
+            psqlStore.write(lid, Fields.schema, s)
+          }
+
           blocking {
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
               store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
