@@ -233,7 +233,7 @@ object Mosaic extends KamonTrace with TimingLogging {
           if (rgbOnly) {
             maybeColorCorrectParams.map { colorCorrectParams =>
               printCurrentTime(4)
-              Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
+              val res = Mosaic.fetch(sceneId, zoom, col, row).flatMap { tile =>
                 val res = timedCreate("Mosaic", s"layerHistogram($sceneId, $zoom) start", s"layerHistogram($sceneId, $zoom) finish") { LayerCache.layerHistogram(sceneId, zoom) }.map { hist =>
                   printCurrentTime(5)
                   colorCorrectParams.colorCorrect(tile, hist)
@@ -242,6 +242,12 @@ object Mosaic extends KamonTrace with TimingLogging {
 
                 res
               }.value
+
+              res onComplete {
+                case _ => printCurrentTime(7)
+              }
+
+              res
             }
           } else {
             // Wrap in List so it can flattened by the same flatMap above
