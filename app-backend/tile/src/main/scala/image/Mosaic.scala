@@ -19,8 +19,10 @@ import cats.implicits._
 import kamon.trace.Tracer
 import java.util.UUID
 
+import com.amazonaws.util.IOUtils
 import com.azavea.rf.tile.util.TimingLogging
 import geotrellis.spark.io.AttributeStore.Fields
+import geotrellis.spark.io.s3.{S3AttributeStore, S3Client}
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
@@ -44,9 +46,21 @@ object Mosaic extends KamonTrace with TimingLogging {
           val z = if (zoom > maxZoom) maxZoom else zoom
           blocking {
             timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) just read start", s"tileLayerMetadata($id, $zoom) just read finish") {
-              store
-                .read[JsValue](LayerId(layerName, z), Fields.metadataBlob)
-              //store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
+              val lid = LayerId(layerName, z)
+              val s3store = store.asInstanceOf[S3AttributeStore]
+              val s3Client = s3store.s3Client
+              val (bucket, key) = s3store.bucket -> s3store.attributePath(lid, Fields.metadataBlob)
+              val is = s3Client.getObject(bucket, key).getObjectContent
+              val str = try {
+                IOUtils.toString(is)
+              } finally is.close
+
+              str
+                .parseJson
+                .convertTo[(LayerId, JsValue)]._2
+                .asJsObject
+                .fields(Fields.metadata)
+                .convertTo[TileLayerMetadata[SpatialKey]]
             }
 
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
