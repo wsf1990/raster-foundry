@@ -70,20 +70,20 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
       .maximumSize(500)
       .build[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]]
 
-  def layerUri(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, String] =
+  /*def layerUri(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, String] =
     traceName(s"LayerCache.layerUri($layerId)") {
       layerUriCache.take(layerId, _ => blocking {
         traceName(s"LayerCache.layerUri($layerId) (no cache)") {
           OptionT(Scenes.getSceneForCaching(layerId).map(_.flatMap(_.ingestLocation)))
         }
       })
-    }
+    }*/
 
   def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext): OptionT[Future, (AttributeStore, Map[String, Int])] =
     traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
       printCurrentTime(20)
       attributeStoreCache.take(layerId, _ =>
-        layerUri(layerId).mapFilter { catalogUri =>
+        //layerUri(layerId).mapFilter { catalogUri =>
           traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
             printCurrentTime(21)
             //val uri = new AmazonS3URI(catalogUri)
@@ -95,10 +95,10 @@ object LayerCache extends Config with LazyLogging with KamonTrace with TimingLog
               store.layerIds.groupBy(_.name).map { case (k, v) => k -> v.map(_.zoom).max }
             }
             printCurrentTime(22)
-            (store, maxZooms).some
+            OptionT.fromOption((store, maxZooms).some)
             //}
           }
-        }
+        //}
       )
     }
 
