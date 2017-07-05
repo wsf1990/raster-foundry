@@ -50,7 +50,7 @@ object LayerAttributes extends TableQuery(tag => new LayerAttributes(tag)) with 
     LayerAttributes.filter(_.name === name).result
   }
 
-  def insertLayerAttribute(layerAttribute: LayerAttribute)(implicit database: DB) = database.db.run {
+  def insertLayerAttribute(layerAttribute: LayerAttribute)(implicit database: DB): Future[LayerAttribute] = database.db.run {
     (LayerAttributes returning LayerAttributes).forceInsert(layerAttribute)
   }
 
