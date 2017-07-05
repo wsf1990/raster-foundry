@@ -5,109 +5,41 @@ import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables.ScenesToProjects
 import com.azavea.rf.datamodel.{MosaicDefinition, WhiteBalance}
 import com.azavea.rf.common.cache._
+
 import geotrellis.raster._
 import geotrellis.raster.io._
 import geotrellis.spark._
 import geotrellis.spark.io._
-import geotrellis.spark.io.postgres.PostgresAttributeStore
-import geotrellis.spark.io.s3._
 import geotrellis.raster.GridBounds
 import geotrellis.proj4._
 import geotrellis.slick.Projected
 import geotrellis.vector.{Extent, Polygon}
-import geotrellis.vector.io._
 import cats.data._
 import cats.implicits._
-import kamon.trace.Tracer
 import java.util.UUID
 
-import org.apache.commons.io.IOUtils
 import com.azavea.rf.tile.util.TimingLogging
-import geotrellis.raster.histogram.Histogram
-import geotrellis.spark.io.AttributeStore.Fields
-import geotrellis.spark.io.s3.{S3AttributeStore, S3Client}
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
-
 case class TagWithTTL(tag: String, ttl: Duration)
 
 object Mosaic extends KamonTrace with TimingLogging {
-  implicit object CRSJsonFormat extends JsonFormat[CRS] {
-    def write(crs: CRS) =
-      crs.epsgCode match {
-        case Some(epsg) =>
-          JsString(s"epsg:${epsg}")
-        case None =>
-          serializationError(s"Unknown epsg code for ${crs}")
-      }
-
-    def read(value: JsValue): CRS = value match {
-      case JsString(epsg) =>
-        CRS.fromName(epsg)
-      case _ =>
-        deserializationError(s"Failed to parse ${value} to CRS")
-    }
-  }
-
-  implicit object ExtentJsonFormat extends RootJsonFormat[Extent] {
-    def write(extent: Extent): JsValue = JsArray(
-      JsNumber(extent.xmin),
-      JsNumber(extent.ymin),
-      JsNumber(extent.xmax),
-      JsNumber(extent.ymax)
-    )
-
-    def read(value: JsValue): Extent = value match {
-      case JsArray(extent) if extent.size == 4 =>
-        val parsedExtent = extent.map({
-          case JsNumber(minmax) =>
-            minmax.toDouble
-          case _ =>
-            deserializationError("Failed to parse extent array")
-        })
-        Extent(parsedExtent(0), parsedExtent(1), parsedExtent(2), parsedExtent(3))
-      case _ =>
-        deserializationError("Failed to parse extent array")
-    }
-  }
-
   lazy val memcachedClient = LayerCache.memcachedClient
   val memcached = HeapBackedMemcachedClient(LayerCache.memcachedClient)
 
   def tileLayerMetadata(id: UUID, zoom: Int)(implicit database: Database): OptionT[Future, (Int, TileLayerMetadata[SpatialKey])] =
     traceName(s"Mosaic.tileLayerMetadata($id)") {
       LayerCache.attributeStoreForLayer(id).mapFilter { case (store, pyramidMaxZoom) =>
-        //val psqlStore = PostgresAttributeStore()
-        //val s3Store = store.asInstanceOf[S3AttributeStore]
-
         // because metadata attributes are cached in AttributeStore itself, there is no point caching this function
         val layerName = id.toString
         for (maxZoom <- pyramidMaxZoom.get(layerName)) yield {
           val z = if (zoom > maxZoom) maxZoom else zoom
 
           // TODO: remove that migration code
-          /*for {
-            zz <- 1 to maxZoom
-          } yield {
-            val lid = LayerId(layerName, zz)
-            val LayerAttributes(h, md, ki, s) = s3Store.readLayerAttributes[S3LayerHeader, TileLayerMetadata[SpatialKey], SpatialKey](lid)
-            psqlStore.write(lid, Fields.header, h)
-            psqlStore.write(lid, Fields.metadata, md)
-            psqlStore.write(lid, Fields.keyIndex, ki)
-            psqlStore.write(lid, Fields.schema, s)
-          }
-
-          val zlid = LayerId(layerName, 0)
-          psqlStore.write(zlid, "histogram", s3Store.read[Array[Histogram[Double]]](zlid, "histogram"))
-          psqlStore.write(zlid, "extent", s3Store.read[Extent](zlid, "extent")(ExtentJsonFormat))(ExtentJsonFormat)
-          psqlStore.write(zlid, "crs", s3Store.read[CRS](zlid, "crs")(CRSJsonFormat))(CRSJsonFormat)
-          psqlStore.write(zlid, "layerComplete", true)*/
-
           blocking {
             z -> timedCreate("Mosaic", s"tileLayerMetadata($id, $zoom) start", s"tileLayerMetadata($id, $zoom) finish") {
               store.readMetadata[TileLayerMetadata[SpatialKey]](LayerId(layerName, z))
