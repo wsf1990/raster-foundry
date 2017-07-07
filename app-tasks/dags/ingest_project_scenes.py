@@ -180,9 +180,9 @@ def create_ingest_definition_op(*args, **kwargs):
     #logger.info('Successfully created and pushed ingest definition for scene %s', scene_id)
 
     # Store values for later tasks
-    xcom_client.xcom_push(key='ingest_def_uri', value='s3://rasterfoundry-production-data-us-east-1/ingest-definitions/1df28df5-e62f-433f-b35f-41e366e2e811.json')
-    xcom_client.xcom_push(key='ingest_def_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
-    xcom_client.xcom_push(key='scene_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
+    xcom_client.xcom_push(key='ingest_def_uri', value='s3://rasterfoundry-test/daunnc-test/01bf7686-d13b-402e-b72c-586a06395ca8.json')
+    xcom_client.xcom_push(key='ingest_def_id', value='01bf7686-d13b-402e-b72c-586a06395ca8')
+    xcom_client.xcom_push(key='scene_id', value='01bf7686-d13b-402e-b72c-586a06395ca8')
 
 
 @wrap_rollbar
