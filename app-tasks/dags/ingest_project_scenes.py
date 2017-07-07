@@ -153,8 +153,8 @@ def wait_for_success(response, cluster_id):
 def create_ingest_definition_op(*args, **kwargs):
     """Create ingest definition and upload to S3"""
 
-    # conf = kwargs['dag_run'].conf
-    # xcom_client = kwargs['task_instance']
+    conf = kwargs['dag_run'].conf
+    xcom_client = kwargs['task_instance']
 
     # scene_id = conf.get('sceneId')
     # xcom_client.xcom_push(key='ingest_scene_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
