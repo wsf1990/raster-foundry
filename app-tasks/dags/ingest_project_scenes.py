@@ -153,36 +153,36 @@ def wait_for_success(response, cluster_id):
 def create_ingest_definition_op(*args, **kwargs):
     """Create ingest definition and upload to S3"""
 
-    conf = kwargs['dag_run'].conf
-    xcom_client = kwargs['task_instance']
+    # conf = kwargs['dag_run'].conf
+    # xcom_client = kwargs['task_instance']
 
-    scene_id = conf.get('sceneId')
-    xcom_client.xcom_push(key='ingest_scene_id', value=scene_id)
-    scene = Scene.from_id(scene_id)
+    # scene_id = conf.get('sceneId')
+    # xcom_client.xcom_push(key='ingest_scene_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
+    #scene = Scene.from_id(scene_id)
 
-    logger.info('Beginning to create ingest definition for scene %s for user %s...',
-                scene_id, scene.owner)
+    #logger.info('Beginning to create ingest definition for scene %s for user %s...',
+    #            scene_id, scene.owner)
 
-    if scene.ingestStatus != IngestStatus.TOBEINGESTED and scene.ingestStatus != IngestStatus.FAILED:
-        raise Exception('Scene is no longer waiting to be ingested, error error')
+    # if scene.ingestStatus != IngestStatus.TOBEINGESTED and scene.ingestStatus != IngestStatus.FAILED:
+    #    raise Exception('Scene is no longer waiting to be ingested, error error')
 
-    scene.ingestStatus = IngestStatus.INGESTING
-    logger.info('Updating scene (%s) status to ingesting', scene_id)
-    scene.update()
-    logger.info('Successfully updated scene (%s) status', scene_id)
+    # scene.ingestStatus = IngestStatus.INGESTING
+    #logger.info('Updating scene (%s) status to ingesting', scene_id)
+    # scene.update()
+    #logger.info('Successfully updated scene (%s) status', scene_id)
 
-    logger.info('Creating ingest definition')
-    if scene.datasource != landsat_id:
-        ingest_definition = create_ingest_definition(scene)
-    else:
-        ingest_definition = create_landsat8_ingest(scene)
-    ingest_definition.put_in_s3()
-    logger.info('Successfully created and pushed ingest definition for scene %s', scene_id)
+    #logger.info('Creating ingest definition')
+    #if scene.datasource != landsat_id:
+    #    ingest_definition = create_ingest_definition(scene)
+    #else:
+    #    ingest_definition = create_landsat8_ingest(scene)
+    #ingest_definition.put_in_s3()
+    #logger.info('Successfully created and pushed ingest definition for scene %s', scene_id)
 
     # Store values for later tasks
-    xcom_client.xcom_push(key='ingest_def_uri', value=ingest_definition.s3_uri)
-    xcom_client.xcom_push(key='ingest_def_id', value=ingest_definition.id)
-    xcom_client.xcom_push(key='scene_id', value=scene.id)
+    xcom_client.xcom_push(key='ingest_def_uri', value='s3://rasterfoundry-production-data-us-east-1/ingest-definitions/1df28df5-e62f-433f-b35f-41e366e2e811.json')
+    xcom_client.xcom_push(key='ingest_def_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
+    xcom_client.xcom_push(key='scene_id', value='04b5a885-1904-4023-b4df-89e71c19e0a2')
 
 
 @wrap_rollbar
