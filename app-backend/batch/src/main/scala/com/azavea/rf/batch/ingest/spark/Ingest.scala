@@ -260,7 +260,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
       tileLayerMetadata.layout,
       resampleMethod)
 
-    println(s"tileRdd.count: ${tileRdd.count}")
+    println(s"tiledRdd.count: ${tiledRdd.count}")
 
     /*
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
