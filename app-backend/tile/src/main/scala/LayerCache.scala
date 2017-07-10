@@ -29,6 +29,7 @@ import spray.json.DefaultJsonProtocol._
 import kamon.trace.Tracer
 import cats.data._
 import cats.implicits._
+import com.carrotsearch.sizeof.RamUsageEstimator
 
 import java.util.UUID
 import scala.concurrent._
