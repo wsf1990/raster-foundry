@@ -148,6 +148,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
                   .tile
 
                 println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(resz): ${RamUsageEstimator.sizeOf(resz)}")
+                println(s"extent-tile-$layerId-$zoom-$extent:: resz.size: ${resz.size}")
                 resz
               } match {
                 case Success(tile) => Option(tile)
