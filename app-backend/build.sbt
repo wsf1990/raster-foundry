@@ -257,7 +257,8 @@ lazy val tile = Project("tile", file("tile"))
       Dependencies.scalajHttp % "it,test",
       Dependencies.gatlingApp,
       Dependencies.gatlingTest,
-      Dependencies.gatlingHighcharts
+      Dependencies.gatlingHighcharts,
+      "com.carrotsearch" % "java-sizeof" % "0.0.5"
     )
   })
   .settings(assemblyMergeStrategy in assembly := {
