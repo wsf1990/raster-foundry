@@ -139,13 +139,16 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
           val res = blocking {
             traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
               Try {
-                S3CollectionLayerReader(store)
+                val resz = S3CollectionLayerReader(store)
                   .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(layerId.toString, zoom))
                   .where(Intersects(extent))
                   .result
                   .stitch
                   .crop(extent)
                   .tile
+
+                println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(resz): ${RamUsageEstimator.sizeOf(resz)}")
+                resz
               } match {
                 case Success(tile) => Option(tile)
                 case Failure(e) =>
