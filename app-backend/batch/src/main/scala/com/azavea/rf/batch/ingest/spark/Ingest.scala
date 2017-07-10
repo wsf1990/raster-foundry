@@ -255,13 +255,14 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
     val (maxZoom, tileLayerMetadata) = Ingest.calculateTileLayerMetadata(layer, layoutScheme)
 
-    println(s"sourceTiles.count: ${sourceTiles.count}")
-
-    /*val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
+    val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
       tileLayerMetadata.cellType,
       tileLayerMetadata.layout,
       resampleMethod)
 
+    println(s"tileRdd.count: ${tileRdd.count}")
+
+    /*
     // Merge Tiles into MultibandTile and fill in bands that aren't listed
     val multibandTiledRdd: RDD[(SpatialKey, MultibandTile)] = tiledRdd
       .map { case ((key, band), tile) => key -> (tile, band) }
