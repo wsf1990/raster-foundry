@@ -136,7 +136,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     traceName(s"LayerCache.layerTileForExtent($layerId)") {
       tileCache.cachingOptionT(s"extent-tile-$layerId-$zoom-$extent") { implicit ec =>
         val result = attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
-          blocking {
+          val res = blocking {
             traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
               Try {
                 S3CollectionLayerReader(store)
@@ -154,6 +154,8 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
               }
             }
           }
+          println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(res): ${RamUsageEstimator.sizeOf(res)}")
+          res
         }
 
         println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(result): ${RamUsageEstimator.sizeOf(result)}")
