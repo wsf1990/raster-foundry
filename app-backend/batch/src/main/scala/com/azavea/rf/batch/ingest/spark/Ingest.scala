@@ -255,7 +255,9 @@ object Ingest extends SparkJob with LazyLogging with Config {
 
     val (maxZoom, tileLayerMetadata) = Ingest.calculateTileLayerMetadata(layer, layoutScheme)
 
-    val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
+    println(s"sourceTiles.count: ${sourceTiles.count}")
+
+    /*val tiledRdd = sourceTiles.tileToLayout[(SpatialKey, Int)](
       tileLayerMetadata.cellType,
       tileLayerMetadata.layout,
       resampleMethod)
@@ -307,7 +309,7 @@ object Ingest extends SparkJob with LazyLogging with Config {
       writer.write(sharedId, layerRdd)
     }
     attributeStore.write(sharedId, "ingestComplete", true)
-    logger.info("Ingest complete")
+    logger.info("Ingest complete")*/
   }
 
   /** Sample ingest definitions can be found in the accompanying test/resources
