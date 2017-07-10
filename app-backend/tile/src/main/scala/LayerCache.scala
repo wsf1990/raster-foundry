@@ -135,21 +135,17 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
   def layerTileForExtent(layerId: UUID, zoom: Int, extent: Extent): OptionT[Future, MultibandTile] =
     traceName(s"LayerCache.layerTileForExtent($layerId)") {
       tileCache.cachingOptionT(s"extent-tile-$layerId-$zoom-$extent") { implicit ec =>
-        attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
+        val result = attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
           blocking {
             traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
               Try {
-                val result = S3CollectionLayerReader(store)
+                S3CollectionLayerReader(store)
                   .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(layerId.toString, zoom))
                   .where(Intersects(extent))
                   .result
                   .stitch
                   .crop(extent)
                   .tile
-
-                println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(result): ${RamUsageEstimator.sizeOf(result)}")
-
-                result
               } match {
                 case Success(tile) => Option(tile)
                 case Failure(e) =>
@@ -159,6 +155,10 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
             }
           }
         }
+
+        println(s"extent-tile-$layerId-$zoom-$extent:: RamUsageEstimator.sizeOf(result): ${RamUsageEstimator.sizeOf(result)}")
+
+        result
       }
     }
 
