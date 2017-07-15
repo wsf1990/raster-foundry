@@ -33,8 +33,12 @@ import java.util.UUID
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util._
+import scalacache._
+import memcached._
+import scalacache.memoization._
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
   * ValueReaders need to read layer metadata in order to know how to decode (x/y) queries into resource reads.
@@ -48,10 +52,12 @@ import scala.util._
 object LayerCache extends Config with LazyLogging with KamonTrace {
   implicit val database = Database.DEFAULT
 
-  lazy val memcachedClient = KryoMemcachedClient.DEFAULT
+  val memcachedClient = KryoMemcachedClient.DEFAULT
   private val histogramCache = HeapBackedMemcachedClient(memcachedClient)
   private val tileCache = HeapBackedMemcachedClient(memcachedClient)
   private val astCache = HeapBackedMemcachedClient(memcachedClient)
+
+  implicit val scalaCache = ScalaCache(MemcachedCache(memcachedClient))
 
   private val attributeStoreCache: ScaffeineCache[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]] =
     Scaffeine()
@@ -60,132 +66,183 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       .maximumSize(500)
       .build[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]]
 
-  def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, (AttributeStore, Map[String, Int])] =
-    traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
-      attributeStoreCache.take(layerId, _ =>
-        traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
-          val store = PostgresAttributeStore()
-          val maxZooms: Map[String, Int] = blocking { store.maxZoomsForLayers(projectLayerIds.map(_.toString)) }
-          OptionT.fromOption((store, maxZooms).some)
-        }
-      )
+  val store = PostgresAttributeStore()
+
+  def attributeStoreForLayerCache(layerId: UUID)(implicit @cacheKeyExclude ec: ExecutionContext, projectLayerIds: Set[UUID]): Future[Option[Map[String, Int]]] = memoize {
+    Future {
+      val maxZooms: Map[String, Int] = blocking {
+        store.maxZoomsForLayers(projectLayerIds.map(_.toString))
+      }
+      maxZooms.some
     }
+  }
+
+  def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, Map[String, Int]] = {
+    traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
+      OptionT(attributeStoreForLayerCache(layerId))
+    }
+  }
+
+  def layerHistogramCache(layerId: UUID, zoom: Int)(implicit @cacheKeyExclude ec: ExecutionContext, projectLayerIds: Set[UUID]): Future[Option[Array[Histogram[Double]]]] = memoize {
+    Future {
+      val x = store.read[Array[Histogram[Double]]](LayerId(layerId.toString, 0), "histogram")
+      Some(x)
+    }
+  }
 
   def layerHistogram(layerId: UUID, zoom: Int)(implicit projectLayerIds: Set[UUID]): OptionT[Future, Array[Histogram[Double]]] =
     traceName(s"LayerCache.layerHistogram($layerId)") {
-      histogramCache.cachingOptionT(s"histogram-$layerId-$zoom") { implicit ec =>
-        attributeStoreForLayer(layerId).map { case (store, _) => blocking {
-          traceName(s"LayerCache.layerHistogram($layerId) (no cache)") {
-            store.read[Array[Histogram[Double]]](LayerId(layerId.toString, 0), "histogram")
-          }
-        } }
-      }
+      OptionT(layerHistogramCache(layerId, zoom))
     }
 
-  def layerTile(layerId: UUID, zoom: Int, key: SpatialKey)(implicit projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
-    traceName(s"LayerCache.layerTile($layerId)") {
-      tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
-        attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
-          val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
-          blocking {
-            traceName(s"LayerCache.layerTile($layerId) (no cache)") {
-              Try {
-                reader.read(key)
-              } match {
-                case Success(tile) => tile.some
-                case Failure(e: ValueNotFoundError) => None
-                case Failure(e) =>
-                  logger.error(s"Reading layer $layerId at $key: ${e.getMessage}")
-                  None
-              }
-            }
+  def layerTile(layerId: UUID, zoom: Int, key: SpatialKey)(implicit projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] = {
+    OptionT(layerTileCache(layerId, zoom, key))
+  }
+
+  def layerTileCache(layerId: UUID, zoom: Int, key: SpatialKey)(implicit @cacheKeyExclude ec: ExecutionContext, projectLayerIds: Set[UUID]): Future[Option[MultibandTile]] = memoize {
+    Future {
+      val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
+      blocking {
+        Try {
+          reader.read(key)
+        } match {
+          case Success(tile) => tile.some
+          case Failure(e: ValueNotFoundError) => None
+          case Failure(e) =>
+            logger.error(s"Reading layer $layerId at $key: ${e.getMessage}")
+            None
+        }
+      }
+    }
+  }
+
+  def layerTileForExtent(layerId: UUID, zoom: Int, extent: Extent)(implicit @cacheKeyExclude ec: ExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] = {
+    OptionT(layerTileForExtentCache(layerId, zoom, extent))
+  }
+
+  def layerTileForExtentCache(layerId: UUID, zoom: Int, extent: Extent)(implicit @cacheKeyExclude ec: ExecutionContext, projectLayerIds: Set[UUID]): Future[Option[MultibandTile]] = memoize {
+    Future {
+      blocking {
+        traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
+          Try {
+            S3CollectionLayerReader(store)
+              .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(layerId.toString, zoom))
+              .where(Intersects(extent))
+              .result
+              .stitch
+              .crop(extent)
+              .tile
+              .resample(256, 256)
+          } match {
+            case Success(tile) => Option(tile)
+            case Failure(e) =>
+              logger.error(s"Query layer $layerId at zoom $zoom for $extent: ${e.getMessage}")
+              None
           }
         }
       }
     }
+  }
 
-  def layerTileForExtent(layerId: UUID, zoom: Int, extent: Extent)(implicit projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
-    traceName(s"LayerCache.layerTileForExtent($layerId)") {
-      tileCache.cachingOptionT(s"extent-tile-$layerId-$zoom-$extent") { implicit ec =>
-        attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
-          blocking {
-            traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
-              Try {
-                S3CollectionLayerReader(store)
-                  .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(layerId.toString, zoom))
-                  .where(Intersects(extent))
-                  .result
-                  .stitch
-                  .crop(extent)
-                  .tile
-                  .resample(256, 256)
-              } match {
-                case Success(tile) => Option(tile)
-                case Failure(e) =>
-                  logger.error(s"Query layer $layerId at zoom $zoom for $extent: ${e.getMessage}")
-                  None
-              }
-            }
-          }
-        }
-      }
-    }
-
-
-  /** Calculate the histogram for the least resolute zoom level to automatically render tiles */
   def modelLayerGlobalHistogram(
     toolRunId: UUID,
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, Histogram[Double]] = traceName(s"LayerCache.modelLayerGlobalHistogram($toolRunId)") {
-    val cacheKey = s"histogram-${toolRunId}-${subNode}-${user.id}"
+  ): OptionT[Future, Histogram[Double]] = OptionT(modelLayerGlobalHistogramCache(toolRunId, subNode, user, voidCache))
 
-    if (voidCache) histogramCache.delete(cacheKey)
-    histogramCache.cachingOptionT(cacheKey) { implicit ec =>
-      traceName(s"LayerCache.modelLayerGlobalHistogram($toolRunId) (no cache)") {
-        for {
-          (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)
-          (ast, params)   <- LayerCache.toolEvalRequirements(toolRunId, subNode, user, voidCache)
-          (extent, zoom)  <- TileSources.fullDataWindow(params.sources)
-          lztile          <- OptionT(Interpreter.interpretGlobal(ast, params.sources, params.overrides, extent, { r => TileSources.globalSource(extent, zoom, r) }).map(_.toOption))
-          tile            <- OptionT.fromOption[Future](lztile.evaluateDouble)
-        } yield {
-          val hist = StreamingHistogram.fromTile(tile)
-          val currentMetadata = params.metadata.getOrElse(ast.id, NodeMetadata())
-          val updatedMetadata = currentMetadata.copy(histogram = Some(hist))
-          val updatedParams = params.copy(metadata = params.metadata + (ast.id -> updatedMetadata))
-          val updatedToolRun = toolRun.copy(executionParameters = updatedParams.asJson)
-          try {
-            database.db.run { ToolRuns.updateToolRun(updatedToolRun, toolRun.id, user) }
-          } catch {
-            case e: Exception =>
-              logger.error(s"Unable to update ToolRun (${toolRun.id}): ${e.getMessage}")
-          }
 
-          hist
+  /** Calculate the histogram for the least resolute zoom level to automatically render tiles */
+  def modelLayerGlobalHistogramCache(
+    toolRunId: UUID,
+    subNode: Option[UUID],
+    user: User,
+    voidCache: Boolean = false
+  ): Future[Option[Histogram[Double]]] = memoize {
+    val h = for {
+      (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)
+      (ast, params) <- LayerCache.toolEvalRequirements(toolRunId, subNode, user, voidCache)
+      (extent, zoom) <- TileSources.fullDataWindow(params.sources)
+      lztile <- OptionT(Interpreter.interpretGlobal(ast, params.sources, params.overrides, extent, { r => TileSources.globalSource(extent, zoom, r) }).map(_.toOption))
+      tile <- OptionT.fromOption[Future](lztile.evaluateDouble)
+    } yield {
+      val hist = StreamingHistogram.fromTile(tile)
+      val currentMetadata = params.metadata.getOrElse(ast.id, NodeMetadata())
+      val updatedMetadata = currentMetadata.copy(histogram = Some(hist))
+      val updatedParams = params.copy(metadata = params.metadata + (ast.id -> updatedMetadata))
+      val updatedToolRun = toolRun.copy(executionParameters = updatedParams.asJson)
+      try {
+        database.db.run {
+          ToolRuns.updateToolRun(updatedToolRun, toolRun.id, user)
         }
+      } catch {
+        case e: Exception =>
+          logger.error(s"Unable to update ToolRun (${toolRun.id}): ${e.getMessage}")
       }
+      hist
     }
+    h.value
   }
 
   def toolAndToolRun(
     toolRunId: UUID,
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, (Tool.WithRelated, ToolRun)] =
-    traceName(s"LayerCache.toolAndToolRun($toolRunId)") {
-      astCache.cachingOptionT(s"tool+run-$toolRunId-${user.id}") { implicit ec =>
-        traceName(s"LayerCache.toolAndToolRun($toolRunId) (no cache)") {
-          for {
-            toolRun <- OptionT(database.db.run(ToolRuns.getToolRun(toolRunId, user)))
-            tool <- OptionT(Tools.getTool(toolRun.tool, user))
-          } yield (tool, toolRun)
-        }
-      }
-    }
+  ): OptionT[Future, (Tool.WithRelated, ToolRun)] = OptionT(toolAndToolRunCache(toolRunId, user, voidCache))
 
+  def toolAndToolRunCache(
+    toolRunId: UUID,
+    user: User,
+    voidCache: Boolean = false
+  ): Future[Option[(Tool.WithRelated, ToolRun)]] = memoize {
+    {
+      for {
+        toolRun <- OptionT(database.db.run(ToolRuns.getToolRun(toolRunId, user)))
+        tool <- OptionT(Tools.getTool(toolRun.tool, user))
+      } yield (tool, toolRun)
+    }.value
+  }
 
+  /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
+  def toolEvalRequirementsCache(
+    toolRunId: UUID,
+    subNode: Option[UUID],
+    user: User,
+    voidCache: Boolean = false
+  ): Future[Option[(MapAlgebraAST, EvalParams)]] = memoize {
+    {
+      for {
+        (tool, toolRun) <- toolAndToolRun(toolRunId, user)
+        oldAst <- OptionT.fromOption[Future]({
+          logger.debug(s"Parsing Tool AST with ${tool.definition}")
+          val entireAST = tool.definition.as[MapAlgebraAST].valueOr(throw _)
+          subNode.flatMap(id => entireAST.find(id)).orElse(Some(entireAST))
+        })
+        subs <- assembleSubstitutions(oldAst, { id: UUID =>
+          OptionT(Tools.getTool(id, user))
+            .map({ referrent => referrent.definition.as[MapAlgebraAST].valueOr(throw _) })
+            .value
+        })
+        ast <- OptionT.fromOption[Future](oldAst.substitute(subs))
+        nodeId <- OptionT.pure[Future, UUID](subNode.getOrElse(ast.id))
+        params <- OptionT.pure[Future, EvalParams]({
+          logger.debug(s"Parsing ToolRun parameters with ${toolRun.executionParameters}")
+          val parsedParams = toolRun.executionParameters.as[EvalParams].valueOr(throw _)
+          val defaults = ast.metadata
+          val overrides = parsedParams.metadata.get(ast.id)
+          val md = (overrides |@| defaults).map(_.fallbackTo(_))
+            .orElse(overrides)
+            .orElse(defaults)
+            .getOrElse(NodeMetadata())
+
+          EvalParams(
+            parsedParams.sources,
+            parsedParams.metadata + (ast.id -> md)
+          )
+        })
+      } yield (ast, params)
+    }.value
+  }
 
   /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
   def toolEvalRequirements(
@@ -193,74 +250,39 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, (MapAlgebraAST, EvalParams)] =
-    traceName(s"LayerCache.toolEvalRequirements($toolRunId)") {
-      val cacheKey = s"ast+params-$toolRunId-${subNode}-${user.id}"
-      if (voidCache) histogramCache.delete(cacheKey)
-      astCache.cachingOptionT(cacheKey) { implicit ec =>
-        traceName(s"LayerCache.toolEvalRequirements($toolRunId) (no cache)") {
-          for {
-            (tool, toolRun) <- toolAndToolRun(toolRunId, user)
-            oldAst   <- OptionT.fromOption[Future]({
-              logger.debug(s"Parsing Tool AST with ${tool.definition}")
-              val entireAST = tool.definition.as[MapAlgebraAST].valueOr(throw _)
-              subNode.flatMap(id => entireAST.find(id)).orElse(Some(entireAST))
-            })
-            subs     <- assembleSubstitutions(oldAst, { id: UUID =>
-              OptionT(Tools.getTool(id, user))
-                .map({ referrent => referrent.definition.as[MapAlgebraAST].valueOr(throw _) })
-                .value
-            })
-            ast      <- OptionT.fromOption[Future](oldAst.substitute(subs))
-            nodeId   <- OptionT.pure[Future, UUID](subNode.getOrElse(ast.id))
-            params   <- OptionT.pure[Future, EvalParams]({
-              logger.debug(s"Parsing ToolRun parameters with ${toolRun.executionParameters}")
-              val parsedParams = toolRun.executionParameters.as[EvalParams].valueOr(throw _)
-              val defaults = ast.metadata
-              val overrides = parsedParams.metadata.get(ast.id)
-              val md = (overrides |@| defaults).map(_.fallbackTo(_))
-                .orElse(overrides)
-                .orElse(defaults)
-                .getOrElse(NodeMetadata())
+  ): OptionT[Future, (MapAlgebraAST, EvalParams)] = OptionT(toolEvalRequirementsCache(toolRunId, subNode, user, voidCache))
 
-              EvalParams(
-                parsedParams.sources,
-                parsedParams.metadata + (ast.id -> md)
-              )
-            })
-          } yield (ast, params)
-        }
-      }
-    }
-
-  /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
   def toolRunColorMap(
     toolRunId: UUID,
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, ColorMap] = traceName(s"LayerCache.toolRunColorMap($toolRunId)") {
-    val cacheKey = s"colormap-$toolRunId-${subNode}-${user.id}"
-    if (voidCache) astCache.delete(cacheKey)
-    astCache.cachingOptionT(cacheKey) { implicit ec =>
-      traceName(s"LayerCache.toolRunColorMap($toolRunId) (no cache)") {
-        for {
-          (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)
-          (ast, params) <- LayerCache.toolEvalRequirements(toolRunId, subNode, user, voidCache)
-          nodeId <- OptionT.pure[Future, UUID](subNode.getOrElse(ast.id))
-          metadata <- OptionT.fromOption[Future](params.metadata.get(nodeId))
-          cRamp <- OptionT.fromOption[Future](metadata.colorRamp).orElse(OptionT.pure[Future, ColorRamp](geotrellis.raster.render.ColorRamps.Viridis))
-          cmap <- OptionT.fromOption[Future](metadata.classMap.map(_.toColorMap)).orElse({
-            for {
-              breaks <- OptionT.fromOption[Future](metadata.breaks)
-            } yield cRamp.toColorMap(breaks)
-          }).orElse({
-            for {
-              hist <- OptionT.fromOption[Future](metadata.histogram).orElse(LayerCache.modelLayerGlobalHistogram(toolRunId, subNode, user, voidCache))
-            } yield cRamp.toColorMap(hist)
-          })
-        } yield cmap
-      }
-    }
+  ): OptionT[Future, ColorMap] = OptionT(toolRunColorMapCache(toolRunId, subNode, user, voidCache))
+
+  /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
+  def toolRunColorMapCache(
+    toolRunId: UUID,
+    subNode: Option[UUID],
+    user: User,
+    voidCache: Boolean = false
+  ): Future[Option[ColorMap]] = memoize {
+    {
+      for {
+        (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)
+        (ast, params) <- LayerCache.toolEvalRequirements(toolRunId, subNode, user, voidCache)
+        nodeId <- OptionT.pure[Future, UUID](subNode.getOrElse(ast.id))
+        metadata <- OptionT.fromOption[Future](params.metadata.get(nodeId))
+        cRamp <- OptionT.fromOption[Future](metadata.colorRamp).orElse(OptionT.pure[Future, ColorRamp](geotrellis.raster.render.ColorRamps.Viridis))
+        cmap <- OptionT.fromOption[Future](metadata.classMap.map(_.toColorMap)).orElse({
+          for {
+            breaks <- OptionT.fromOption[Future](metadata.breaks)
+          } yield cRamp.toColorMap(breaks)
+        }).orElse({
+          for {
+            hist <- OptionT.fromOption[Future](metadata.histogram).orElse(LayerCache.modelLayerGlobalHistogram(toolRunId, subNode, user, voidCache))
+          } yield cRamp.toColorMap(hist)
+        })
+      } yield cmap
+    }.value
   }
 }

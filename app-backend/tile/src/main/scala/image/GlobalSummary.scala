@@ -56,11 +56,10 @@ object GlobalSummary extends LazyLogging {
     size: Int = 512
   )(implicit database: Database, ec: ExecutionContext, sceneIds: Set[UUID]): OptionT[Future, (Extent, Int)] =
     Mosaic.mosaicDefinition(projId, None).semiflatMap({ mosaic =>
-      Future.sequence(mosaic.map { case MosaicDefinition(sceneId, _) =>
-        LayerCache.attributeStoreForLayer(sceneId).mapFilter { case (store, _) =>
-          minAcceptableSceneZoom(sceneId, store, 256)
-        }.value
-      })
+      Future {
+        mosaic.map { case MosaicDefinition(sceneId, _) =>
+          minAcceptableSceneZoom(sceneId, LayerCache.store, 256)
+      } }
     }).map({ zoomsAndExtents =>
       zoomsAndExtents.flatten.reduce({ (agg, next) =>
         val e1 = agg._1

@@ -56,21 +56,22 @@ object TileSources extends LazyLogging {
     * which one could read a Layer for the purpose of calculating a representative
     * histogram.
     */
-  def dataWindow(r: RFMLRaster)(implicit database: Database): OptionT[Future, (Extent, Int)] = r match {
-    case SceneRaster(id, Some(_), _) => {
-      implicit val sceneIds = Set(id)
-      LayerCache.attributeStoreForLayer(id).mapFilter({ case (store, _) =>
-        GlobalSummary.minAcceptableSceneZoom(id, store, 256)  // TODO: 512?
-      })
-    }
-    case ProjectRaster(id, Some(_), _) => {
-      implicit val sceneIds = Set(id)
-      GlobalSummary.minAcceptableProjectZoom(id, 256) // TODO: 512?
-    }
+  def dataWindow(r: RFMLRaster)(implicit database: Database, ec: ExecutionContext): OptionT[Future, (Extent, Int)] = {
+      r match {
+        case SceneRaster(id, Some(_), _) => {
+          implicit val sceneIds = Set(id)
+          OptionT.fromOption(GlobalSummary.minAcceptableSceneZoom(id, LayerCache.store, 256)) // TODO: 512?
+        }
+        case ProjectRaster(id, Some(_), _) => {
+          implicit val sceneIds = Set(id)
+          GlobalSummary.minAcceptableProjectZoom(id, 256) // TODO: 512?
+        }
 
-    /* Don't attempt work for a RFMLRaster which will fail AST validation anyway */
-    case _ => OptionT.none
+        /* Don't attempt work for a RFMLRaster which will fail AST validation anyway */
+        case _ => OptionT.none
+      }
   }
+
 
   /** This source will return the raster for all of zoom level 1 and is
     *  useful for generating a histogram which allows binning values into
@@ -80,35 +81,34 @@ object TileSources extends LazyLogging {
     extent: Extent,
     zoom: Int,
     r: RFMLRaster
-  )(implicit database: Database): Future[Option[Tile]] = r match {
-    case SceneRaster(id, Some(band), maybeND) =>
-      implicit val sceneIds = Set(id)
-      LayerCache.attributeStoreForLayer(id).mapFilter({ case (store, _) =>
+  )(implicit database: Database): Future[Option[Tile]] = {
+    r match {
+      case SceneRaster(id, Some(band), maybeND) => {
+        implicit val sceneIds = Set(id)
         blocking {
           Try {
             val layerId = LayerId(id.toString, zoom)
 
-            S3CollectionLayerReader(store)
+            S3CollectionLayerReader(LayerCache.store)
               .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
               .result
               .stitch
               .crop(extent)
               .tile
           } match {
-            case Success(tile) => Option(tile.band(band).interpretAs(maybeND.getOrElse(tile.cellType)))
+            case Success(tile) => Future.successful(Option(tile.band(band).interpretAs(maybeND.getOrElse(tile.cellType))))
             case Failure(e) =>
               logger.error(s"Query layer $id at zoom $zoom for $extent: ${e.getMessage}")
-              None
+              Future.successful(None)
           }
         }
-      }).value
-
-    case ProjectRaster(projId, Some(band), maybeND) => {
-      Mosaic.rawForExtent(projId, zoom, Some(Projected(extent.toPolygon, 3857)))
-        .map({ tile => tile.band(band).interpretAs(maybeND.getOrElse(tile.cellType)) }).value
+      }
+      case ProjectRaster(projId, Some(band), maybeND) => {
+        Mosaic.rawForExtent(projId, zoom, Some(Projected(extent.toPolygon, 3857)))
+          .map({ tile => tile.band(band).interpretAs(maybeND.getOrElse(tile.cellType)) }).value
+      }
+      case _ => Future.successful(None)
     }
-
-    case _ => Future.successful(None)
   }
 
   /** This source provides support for z/x/y TMS tiles */
