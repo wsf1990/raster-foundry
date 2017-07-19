@@ -33,6 +33,7 @@ class Router extends LazyLogging
   implicit val materializer = AkkaSystem.materializer
   implicit val executionContext: ExecutionContext = system.dispatcher
   implicit val blockingExecutionContext: BlockingExecutionContext = BlockingExecutionContext(system.dispatchers.lookup("blocking-io-dispatcher"))
+  val heavyBlockingExecutionContext: BlockingExecutionContext = BlockingExecutionContext(system.dispatchers.lookup("blocking-io-dispatcher"))
 
   val toolRoutes = new ToolRoutes()
 
@@ -55,7 +56,7 @@ class Router extends LazyLogging
           }
         } ~
         tileAuthenticateOption { _ =>
-          SceneRoutes.root
+          SceneRoutes.root(executionContext, heavyBlockingExecutionContext)
         } ~
         pathPrefix("tools") {
           get {
