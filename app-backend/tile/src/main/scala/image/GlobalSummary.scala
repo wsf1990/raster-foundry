@@ -3,6 +3,7 @@ package com.azavea.rf.tile.image
 import com.azavea.rf.tile._
 import com.azavea.rf.datamodel.MosaicDefinition
 import com.azavea.rf.database.Database
+import com.azavea.rf.common.utils._
 
 import geotrellis.raster._
 import geotrellis.vector.io._
@@ -15,6 +16,7 @@ import cats.data._
 import cats.implicits._
 
 import java.util.UUID
+
 import scala.concurrent._
 import scala.util._
 
@@ -54,23 +56,25 @@ object GlobalSummary extends LazyLogging {
   def minAcceptableProjectZoom(
     projId: UUID,
     size: Int = 512
-  )(implicit database: Database, ec: ExecutionContext, sceneIds: Set[UUID]): OptionT[Future, (Extent, Int)] =
-    Mosaic.mosaicDefinition(projId, None).semiflatMap({ mosaic =>
-      Future.sequence(mosaic.map { case MosaicDefinition(sceneId, _) =>
-        LayerCache.attributeStoreForLayer(sceneId).mapFilter { case (store, _) =>
-          minAcceptableSceneZoom(sceneId, store, 256)
-        }.value
+  )(implicit database: Database, bec: BlockingExecutionContext, sceneIds: Set[UUID]): OptionT[Future, (Extent, Int)] =
+    withComputationContext { implicit ec => implicit bec =>
+      Mosaic.mosaicDefinition(projId, None).semiflatMap({ mosaic =>
+        Future.sequence(mosaic.map { case MosaicDefinition(sceneId, _) =>
+          LayerCache.attributeStoreForLayer(sceneId).mapFilter { case (store, _) =>
+            minAcceptableSceneZoom(sceneId, store, 256)
+          }.value
+        })
+      }).map({ zoomsAndExtents =>
+        zoomsAndExtents.flatten.reduce({ (agg, next) =>
+          val e1 = agg._1
+          val e2 = next._1
+          (Extent(
+            e1.xmin min e2.xmin,
+            e1.ymin min e2.ymin,
+            e1.xmax max e2.xmax,
+            e1.ymax max e2.ymax
+          ), agg._2 max next._2)
+        })
       })
-    }).map({ zoomsAndExtents =>
-      zoomsAndExtents.flatten.reduce({ (agg, next) =>
-        val e1 = agg._1
-        val e2 = next._1
-        (Extent(
-          e1.xmin min e2.xmin,
-          e1.ymin min e2.ymin,
-          e1.xmax max e2.xmax,
-          e1.ymax max e2.ymax
-        ), agg._2 max next._2)
-      })
-    })
+    }
 }

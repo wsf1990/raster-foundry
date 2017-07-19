@@ -11,6 +11,7 @@ import com.azavea.rf.common.cache._
 import com.azavea.rf.common.cache.kryo.KryoMemcachedClient
 import com.azavea.rf.database.Database
 import com.azavea.rf.database.tables._
+import com.azavea.rf.common.utils._
 
 import io.circe.syntax._
 import geotrellis.raster._
@@ -33,7 +34,6 @@ import java.util.UUID
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util._
 
 /**
@@ -60,20 +60,24 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       .maximumSize(500)
       .build[UUID, OptionT[Future, (AttributeStore, Map[String, Int])]]
 
-  def attributeStoreForLayer(layerId: UUID)(implicit ec: ExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, (AttributeStore, Map[String, Int])] =
-    traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
-      attributeStoreCache.take(layerId, _ =>
-        traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
-          val store = PostgresAttributeStore()
-          val maxZooms: Map[String, Int] = blocking { store.maxZoomsForLayers(projectLayerIds.map(_.toString)) }
-          OptionT.fromOption((store, maxZooms).some)
-        }
-      )
+  def attributeStoreForLayer(layerId: UUID)(implicit executionContext: BlockingExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, (AttributeStore, Map[String, Int])] =
+    withComputationContext { implicit ec => implicit bec =>
+      traceName(s"LayerCache.attributeStoreForLayer($layerId)") {
+        attributeStoreCache.take(layerId, _ =>
+          traceName(s"LayerCache.attributeStoreForLayer($layerId) (no cache)") {
+            val store = PostgresAttributeStore()
+            val maxZooms: Map[String, Int] = blocking {
+              store.maxZoomsForLayers(projectLayerIds.map(_.toString))
+            }
+            OptionT.fromOption((store, maxZooms).some)
+          }
+        )
+      }
     }
 
-  def layerHistogram(layerId: UUID, zoom: Int)(implicit projectLayerIds: Set[UUID]): OptionT[Future, Array[Histogram[Double]]] =
+  def layerHistogram(layerId: UUID, zoom: Int)(implicit ec: BlockingExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, Array[Histogram[Double]]] =
     traceName(s"LayerCache.layerHistogram($layerId)") {
-      histogramCache.cachingOptionT(s"histogram-$layerId-$zoom") { implicit ec =>
+      histogramCache.cachingOptionT(s"histogram-$layerId-$zoom") { implicit ec => implicit bec =>
         attributeStoreForLayer(layerId).map { case (store, _) => blocking {
           traceName(s"LayerCache.layerHistogram($layerId) (no cache)") {
             store.read[Array[Histogram[Double]]](LayerId(layerId.toString, 0), "histogram")
@@ -82,9 +86,9 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       }
     }
 
-  def layerTile(layerId: UUID, zoom: Int, key: SpatialKey)(implicit projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
+  def layerTile(layerId: UUID, zoom: Int, key: SpatialKey)(implicit ec: BlockingExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
     traceName(s"LayerCache.layerTile($layerId)") {
-      tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec =>
+      tileCache.cachingOptionT(s"tile-$layerId-$zoom-${key.col}-${key.row}") { implicit ec => implicit bec =>
         attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
           val reader = new S3ValueReader(store).reader[SpatialKey, MultibandTile](LayerId(layerId.toString, zoom))
           blocking {
@@ -104,9 +108,9 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
       }
     }
 
-  def layerTileForExtent(layerId: UUID, zoom: Int, extent: Extent)(implicit projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
+  def layerTileForExtent(layerId: UUID, zoom: Int, extent: Extent)(implicit ec: BlockingExecutionContext, projectLayerIds: Set[UUID]): OptionT[Future, MultibandTile] =
     traceName(s"LayerCache.layerTileForExtent($layerId)") {
-      tileCache.cachingOptionT(s"extent-tile-$layerId-$zoom-$extent") { implicit ec =>
+      tileCache.cachingOptionT(s"extent-tile-$layerId-$zoom-$extent") { implicit ec => implicit bec =>
         attributeStoreForLayer(layerId).mapFilter { case (store, _) =>
           blocking {
             traceName(s"LayerCache.layerTileForExtent($layerId) (no cache)") {
@@ -138,11 +142,11 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, Histogram[Double]] = traceName(s"LayerCache.modelLayerGlobalHistogram($toolRunId)") {
+  )(implicit ec: BlockingExecutionContext): OptionT[Future, Histogram[Double]] = traceName(s"LayerCache.modelLayerGlobalHistogram($toolRunId)") {
     val cacheKey = s"histogram-${toolRunId}-${subNode}-${user.id}"
 
     if (voidCache) histogramCache.delete(cacheKey)
-    histogramCache.cachingOptionT(cacheKey) { implicit ec =>
+    histogramCache.cachingOptionT(cacheKey) { implicit ec => implicit bec =>
       traceName(s"LayerCache.modelLayerGlobalHistogram($toolRunId) (no cache)") {
         for {
           (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)
@@ -173,9 +177,9 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     toolRunId: UUID,
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, (Tool.WithRelated, ToolRun)] =
+  )(implicit ec: BlockingExecutionContext): OptionT[Future, (Tool.WithRelated, ToolRun)] =
     traceName(s"LayerCache.toolAndToolRun($toolRunId)") {
-      astCache.cachingOptionT(s"tool+run-$toolRunId-${user.id}") { implicit ec =>
+      astCache.cachingOptionT(s"tool+run-$toolRunId-${user.id}") { implicit ec => implicit bec =>
         traceName(s"LayerCache.toolAndToolRun($toolRunId) (no cache)") {
           for {
             toolRun <- OptionT(database.db.run(ToolRuns.getToolRun(toolRunId, user)))
@@ -193,11 +197,11 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, (MapAlgebraAST, EvalParams)] =
+  )(implicit ec: BlockingExecutionContext): OptionT[Future, (MapAlgebraAST, EvalParams)] =
     traceName(s"LayerCache.toolEvalRequirements($toolRunId)") {
       val cacheKey = s"ast+params-$toolRunId-${subNode}-${user.id}"
       if (voidCache) histogramCache.delete(cacheKey)
-      astCache.cachingOptionT(cacheKey) { implicit ec =>
+      astCache.cachingOptionT(cacheKey) { implicit ec => implicit bec =>
         traceName(s"LayerCache.toolEvalRequirements($toolRunId) (no cache)") {
           for {
             (tool, toolRun) <- toolAndToolRun(toolRunId, user)
@@ -239,10 +243,10 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     subNode: Option[UUID],
     user: User,
     voidCache: Boolean = false
-  ): OptionT[Future, ColorMap] = traceName(s"LayerCache.toolRunColorMap($toolRunId)") {
+  )(implicit ec: BlockingExecutionContext): OptionT[Future, ColorMap] = traceName(s"LayerCache.toolRunColorMap($toolRunId)") {
     val cacheKey = s"colormap-$toolRunId-${subNode}-${user.id}"
     if (voidCache) astCache.delete(cacheKey)
-    astCache.cachingOptionT(cacheKey) { implicit ec =>
+    astCache.cachingOptionT(cacheKey) { implicit ec => implicit bec =>
       traceName(s"LayerCache.toolRunColorMap($toolRunId) (no cache)") {
         for {
           (tool, toolRun) <- LayerCache.toolAndToolRun(toolRunId, user, voidCache)

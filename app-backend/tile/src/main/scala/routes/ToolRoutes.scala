@@ -3,7 +3,7 @@ package com.azavea.rf.tile.routes
 import com.azavea.rf.common._
 import com.azavea.rf.common.ast._
 import com.azavea.rf.database.Database
-import com.azavea.rf.database.tables.{ToolRuns, Tools}
+import com.azavea.rf.common.utils._
 import com.azavea.rf.tile._
 import com.azavea.rf.tool.ast._
 import com.azavea.rf.tool.eval._
@@ -22,7 +22,6 @@ import geotrellis.raster.render._
 
 import java.util.UUID
 import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
 
 class ToolRoutes(implicit val database: Database) extends Authentication
     with LazyLogging
@@ -53,7 +52,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
   }
 
   /** Endpoint to be used for kicking the histogram cache and ensuring tiles are quickly loaded */
-  val preflight =
+  def preflight(implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
     (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
       pathPrefix(JavaUUID){ (toolRunId) =>
         traceName("toolrun-preflight") {
@@ -62,9 +61,9 @@ class ToolRoutes(implicit val database: Database) extends Authentication
             'voidCache.as[Boolean].?(false)
           ) { (node, void) =>
             authenticateWithParameter { user =>
-              val nodeId = node.map(UUID.fromString(_))
-              onSuccess(LayerCache.toolEvalRequirements(toolRunId, nodeId, user, void).value) { _ =>
-                complete { StatusCodes.NoContent }
+              val nodeId = node.map(UUID.fromString)
+              onSuccess(Future { LayerCache.toolEvalRequirements(toolRunId, nodeId, user, void).value }) { _ =>
+                complete { Future { StatusCodes.NoContent } }
               }
             }
           }
@@ -75,13 +74,13 @@ class ToolRoutes(implicit val database: Database) extends Authentication
   /** Endpoint used to verify that a [[ToolRun]] is sufficient to
     *  evaluate the [[Tool]] to which it refers
     */
-  val validate =
+  def validate(implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
     (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
       pathPrefix(JavaUUID){ (toolRunId) =>
         traceName("toolrun-validate") {
           pathPrefix("validate") {
             authenticateWithParameter { user =>
-              complete(validateAST[Unit](toolRunId, user))
+              complete(Future { validateAST[Unit](toolRunId, user) })
             }
           }
         }
@@ -89,7 +88,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
     }
 
   /** Endpoint used to get a [[ToolRun]] histogram */
-  val histogram =
+  def histogram(implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
     (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
       pathPrefix(JavaUUID){ (toolRunId) =>
         traceName("toolrun-histogram") {
@@ -99,10 +98,10 @@ class ToolRoutes(implicit val database: Database) extends Authentication
                 'node.?,
                 'voidCache.as[Boolean].?(false)
               ) { (node, void) =>
-                complete {
+                complete { Future {
                   val nodeId = node.map(UUID.fromString(_))
                   LayerCache.modelLayerGlobalHistogram(toolRunId, nodeId, user, void).value
-                }
+                } }
               }
             }
           }
@@ -111,9 +110,8 @@ class ToolRoutes(implicit val database: Database) extends Authentication
     }
 
   /** The central endpoint for ModelLab; serves TMS tiles given a [[ToolRun]] specification */
-  def tms(
-    source: (RFMLRaster, Boolean, Int, Int, Int) => Future[Option[TileWithNeighbors]]
-  ): Route =
+  def tms(source: (RFMLRaster, Boolean, Int, Int, Int) => Future[Option[TileWithNeighbors]])
+         (implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
     (handleExceptions(interpreterExceptionHandler) & handleExceptions(circeDecodingError)) {
       pathPrefix(JavaUUID){ (toolRunId) =>
         authenticateWithParameter { user =>
@@ -124,7 +122,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
                 'geotiff.?(false),
                 'cramp.?("viridis")
               ) { (node, geotiffOutput, colorRamp) =>
-                complete {
+                complete { Future {
                   val nodeId = node.map(UUID.fromString(_))
                   val responsePng = for {
                     (toolRun, tool) <- LayerCache.toolAndToolRun(toolRunId, user)
@@ -143,7 +141,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
                     tile.renderPng(cMap)
                   }
                   responsePng.value
-                }
+                } }
               }
             }
           }

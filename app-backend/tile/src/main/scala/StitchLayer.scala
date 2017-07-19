@@ -2,7 +2,6 @@ package com.azavea.rf.tile
 
 import com.azavea.rf.database.Database
 import com.azavea.rf.common.cache._
-
 import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.vector._
@@ -13,10 +12,11 @@ import geotrellis.spark.io.s3._
 import com.typesafe.scalalogging.LazyLogging
 import cats.data._
 import cats.implicits._
-
 import java.util.UUID
+
+import com.azavea.rf.common.utils.BlockingExecutionContext
+
 import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 object StitchLayer extends LazyLogging with Config {
@@ -36,8 +36,8 @@ object StitchLayer extends LazyLogging with Config {
     * For non-cached version use [[stitch]] function.
     */
   val stitchCache = HeapBackedMemcachedClient(memcachedClient)
-  def apply(id: UUID, size: Int)(implicit sceneIds: Set[UUID]): OptionT[Future, MultibandTile] =
-    stitchCache.cachingOptionT(s"stitch-{$size}") { implicit ec =>
+  def apply(id: UUID, size: Int)(implicit bec: BlockingExecutionContext, sceneIds: Set[UUID]): OptionT[Future, MultibandTile] =
+    stitchCache.cachingOptionT(s"stitch-{$size}") { implicit ec => implicit bec =>
       LayerCache.attributeStoreForLayer(id).mapFilter { case (store, _) =>
         stitch(store, id.toString, size)
       }

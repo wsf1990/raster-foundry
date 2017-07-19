@@ -4,6 +4,7 @@ import com.azavea.rf.common.RfStackTrace
 import com.azavea.rf.tile._
 import com.azavea.rf.tile.tool._
 import com.azavea.rf.tile.tool.ToolParams._
+import com.azavea.rf.common.utils._
 
 import geotrellis.raster._
 import geotrellis.raster.io._
@@ -21,17 +22,16 @@ import cats.data._
 import cats.implicits._
 import java.util.UUID
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.util._
 
 object SceneRoutes extends LazyLogging with KamonTraceDirectives {
 
-  def root: Route =
+  def root(implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
     pathPrefix(JavaUUID) { id =>
       pathPrefix("rgb") {
         traceName("rgb") {
-          layerTileAndHistogram(id) { (futureMaybeTile, _) =>
+          layerTileAndHistogram(id)(bec) { (futureMaybeTile, _) =>
             imageRoute(futureMaybeTile)
           }
         } ~
@@ -67,14 +67,14 @@ object SceneRoutes extends LazyLogging with KamonTraceDirectives {
       }
     }
 
-  def layerTile(layer: UUID) =
+  def layerTile(layer: UUID)(implicit bec: BlockingExecutionContext) =
     pathPrefix(IntNumber / IntNumber / IntNumber).tmap[Future[Option[MultibandTile]]] {
       case (zoom: Int, x: Int, y: Int) =>
         implicit val sceneIds = Set(layer)
         LayerCache.layerTile(layer, zoom, SpatialKey(x, y)).value
     }
 
-  def layerTileAndHistogram(id: UUID) =
+  def layerTileAndHistogram(id: UUID)(implicit bec: BlockingExecutionContext) =
     pathPrefix(IntNumber / IntNumber / IntNumber).tmap[(OptionT[Future, MultibandTile], OptionT[Future, Array[Histogram[Double]]])] {
       case (zoom: Int, x: Int, y: Int) =>
         implicit val sceneIds = Set(id)
@@ -86,16 +86,63 @@ object SceneRoutes extends LazyLogging with KamonTraceDirectives {
   def pngAsHttpResponse(png: Png): HttpResponse =
     HttpResponse(entity = HttpEntity(ContentType(MediaTypes.`image/png`), png.bytes))
 
-  def imageThumbnailRoute(id: UUID) =
+  def imageThumbnailRoute(id: UUID)(implicit ec: ExecutionContext, bec: BlockingExecutionContext) =
     parameters('size.as[Int].?(256)) { size =>
       complete {
+        Future {
+          implicit val sceneIds = Set(id)
+          val futureMaybeTile = StitchLayer(id, size)
+          val futureResponse =
+            withComputationContext { implicit ec => implicit bec =>
+              futureMaybeTile.map { tile =>
+                pngAsHttpResponse(tile.renderPng)
+              }
+            }
+          val future = futureResponse.value
+
+          future onComplete {
+            case Success(s) => s
+            case Failure(e) =>
+              logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
+          }
+
+          future
+        }
+      }
+    }
+
+  def imageHistogramRoute(id: UUID)(implicit ec: ExecutionContext, bec: BlockingExecutionContext) = {
+    import DefaultJsonProtocol._
+    complete {
+      Future {
         implicit val sceneIds = Set(id)
-        val futureMaybeTile = StitchLayer(id, size)
         val futureResponse =
-          for {
-            tile <- futureMaybeTile
-          } yield {
-            pngAsHttpResponse(tile.renderPng)
+          withComputationContext { implicit ec => implicit bec =>
+            LayerCache.layerHistogram(id, 0).value.map {
+              _.toArray
+            }
+          }
+
+        futureResponse onComplete {
+          case Success(s) => s
+          case Failure(e) =>
+            logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
+        }
+
+        futureResponse.value
+      }
+    }
+  }
+
+  def imageRoute(futureMaybeTile: OptionT[Future, MultibandTile])
+                (implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route =
+    complete {
+      Future {
+        val futureResponse =
+          withComputationContext { implicit ec => implicit bec =>
+            futureMaybeTile.map { tile =>
+              pngAsHttpResponse(tile.renderPng)
+            }
           }
         val future = futureResponse.value
 
@@ -109,72 +156,34 @@ object SceneRoutes extends LazyLogging with KamonTraceDirectives {
       }
     }
 
-  def imageHistogramRoute(id: UUID) = {
-    import DefaultJsonProtocol._
-    complete {
-      implicit val sceneIds = Set(id)
-      val futureResponse =
-        for {
-          hist <- LayerCache.layerHistogram(id, 0).value
-        } yield {
-          hist.toArray
-        }
-
-      futureResponse onComplete {
-        case Success(s) => s
-        case Failure(e) =>
-          logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
-      }
-
-      futureResponse.value
-    }
-  }
-
-  def imageRoute(futureMaybeTile: OptionT[Future, MultibandTile]): Route =
-    complete {
-      val futureResponse =
-        for {
-          tile <- futureMaybeTile
-        } yield {
-          pngAsHttpResponse(tile.renderPng)
-        }
-      val future = futureResponse.value
-
-      future onComplete {
-        case Success(s) => s
-        case Failure(e) =>
-          logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
-      }
-
-      future
-    }
-
   def toolRoute(
     futureMaybeTile: Future[Option[MultibandTile]],
     index: MultibandTile => Tile,
     defaultColorRamp: Option[ColorRamp] = None,
     defaultBreaks: Option[Array[Double]] = None
-  ): Route = {
+  )(implicit ec: ExecutionContext, bec: BlockingExecutionContext): Route = {
     toolParams(defaultColorRamp, defaultBreaks) { params =>
       complete {
-        val future =
-          for {
-            maybeTile <- futureMaybeTile
-          } yield {
-            maybeTile.map { tile =>
-              val subsetTile = tile.subsetBands(params.bands)
-              val colorMap = ColorMap(params.breaks, params.ramp)
-              pngAsHttpResponse(index(subsetTile).renderPng(colorMap))
+        Future {
+          val future =
+            withComputationContext { implicit ec => implicit bec =>
+              for {maybeTile <- futureMaybeTile} yield {
+                maybeTile.map { tile =>
+                  val subsetTile = tile.subsetBands(params.bands)
+                  val colorMap = ColorMap(params.breaks, params.ramp)
+                  pngAsHttpResponse(index(subsetTile).renderPng(colorMap))
+                }
+              }
             }
+
+          future onComplete {
+            case Success(s) => s
+            case Failure(e) =>
+              logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
           }
 
-        future onComplete {
-          case Success(s) => s
-          case Failure(e) =>
-            logger.error(s"Message: ${e.getMessage}\nStack trace: ${RfStackTrace(e)}")
+          future
         }
-
-        future
       }
     }
   }

@@ -10,6 +10,7 @@ import scala.concurrent.duration._
 import java.util.concurrent.Executors
 
 import com.azavea.rf.common.Config
+import com.azavea.rf.common.utils.{BlockingExecutionContext, ComputationContext}
 
 /**
   * Wraps a MemcachedClient to provide a local cache which stores Future results in case
@@ -58,33 +59,33 @@ class HeapBackedMemcachedClient(
     * @param mappingFunction  the function to compute a value
     * @return the current (existing or computed) value associated with the specified key
     */
-  def caching[T](cacheKey: String)(mappingFunction: ExecutionContext => Future[T]): Future[T] = {
+  def caching[T](cacheKey: String)(mappingFunction: ComputationContext[Future[T]])(implicit bec: BlockingExecutionContext): Future[T] = {
     if(options.enabled) {
       val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
       if(options.heapEnabled) {
         onHeapCache.get(sanitizedKey, { key: String =>
-          client.getOrElseUpdate[T](key, mappingFunction(options.ec), options.memcachedTTL)(options.ec)
+          client.getOrElseUpdate[T](key, mappingFunction(bec)(bec), options.memcachedTTL)(bec)
         }).asInstanceOf[Future[T]]
       } else {
-        client.getOrElseUpdate[T](sanitizedKey, mappingFunction(options.ec), options.memcachedTTL)(options.ec)
+        client.getOrElseUpdate[T](sanitizedKey, mappingFunction(bec)(bec), options.memcachedTTL)(bec)
       }
-    } else mappingFunction(options.ec)
+    } else mappingFunction(bec)(bec)
   }
 
-  def cachingOptionT[T](cacheKey: String)(mappingFunction: ExecutionContext => OptionT[Future, T]): OptionT[Future, T] = {
+  def cachingOptionT[T](cacheKey: String)(mappingFunction: ComputationContext[OptionT[Future, T]])(implicit bec: BlockingExecutionContext): OptionT[Future, T] = {
     if(options.enabled) {
       val sanitizedKey = HeapBackedMemcachedClient.sanitizeKey(cacheKey)
       val futureOption =
         if(options.heapEnabled) {
           onHeapCache.get(sanitizedKey, { key: String =>
-            client.getOrElseUpdate[Option[T]](key, mappingFunction(options.ec).value, options.memcachedTTL)(options.ec)
+            client.getOrElseUpdate[Option[T]](key, mappingFunction(bec)(bec).value, options.memcachedTTL)(bec)
           }).asInstanceOf[Future[Option[T]]]
         } else {
-          client.getOrElseUpdate[Option[T]](sanitizedKey, mappingFunction(options.ec).value, options.memcachedTTL)(options.ec)
+          client.getOrElseUpdate[Option[T]](sanitizedKey, mappingFunction(bec)(bec).value, options.memcachedTTL)(bec)
         }
 
       OptionT(futureOption)
-    } else mappingFunction(options.ec)
+    } else mappingFunction(bec)(bec)
   }
 }
 
@@ -98,11 +99,10 @@ object HeapBackedMemcachedClient {
     * It is also important for the number of IO threads to be bounded because once the IO channel is saturated
     * each new request would otherwise continue spawning additional threads until the heap memory is exhausted.
     */
-  lazy val defaultExecutionContext: ExecutionContext =
-    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(Config.memcached.threads))
+  /*lazy val defaultExecutionContext: ExecutionContext =
+    ExecutionContext.fromExecutor(Executors.newFixedThreadPool(Config.memcached.threads))*/
 
   case class Options(
-    ec: ExecutionContext = defaultExecutionContext,
     heapTTL: FiniteDuration = Config.memcached.heapEntryTTL,
     memcachedTTL: FiniteDuration = Config.memcached.ttl,
     maxSize: Int = Config.memcached.heapMaxEntries,
