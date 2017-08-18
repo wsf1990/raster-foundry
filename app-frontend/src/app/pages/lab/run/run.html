@@ -70,7 +70,7 @@
       <rf-diagram-container
         ng-if="$ctrl.tool"
         class="with-position"
-        toolrun-valid="!!$ctrl.lastToolRun"
+        toolrun="$ctrl.lastToolRun"
         on-preview="$ctrl.showPreview(data)"
         on-share="$ctrl.shareNode(data)"
         on-parameter-change="$ctrl.onExecutionParametersChange(sourceId, project, band, override)"

@@ -1,5 +1,6 @@
 /* global joint, $, _ */
 
+const exampleData = require('./exampleData.json');
 const Map = require('es6-map');
 
 const maxZoom = 3;
@@ -51,22 +52,51 @@ export default class DiagramContainerController {
                   <rf-diagram-node-header
                     data-model="model"
                     data-invalid="model.get('invalid')"
-                    data-menu-options="menuOptions"
                   ></rf-diagram-node-header>
+                  <div class="node-actions">
+                    <div class="node-button-group">
+                      <button class="btn node-button" type="button"
+                              ng-if="onPreview"
+                              ng-click="onPreview($event, this.model)">
+                      <span class="icon-eye"></span>
+                      </button>
+                      <button class="btn node-button" type="button"
+                              ng-class="{'active': showHistogram}"
+                              ng-click="toggleHistogram()">
+                      <span class="icon-histogram"></span>
+                      </button>
+                      <button class="btn node-button" type="button"
+                              ng-click="toggleBody()">
+                      <span ng-class="{'icon-caret-up': showBody,
+                                       'icon-caret-down': !showBody}"></span>
+                      </button>
+                    </div>
+                  </div>
                   <rf-input-node
                     ng-if="model.get('cellType') === 'src'"
+                    ng-show="showBody && !showHistogram"
                     data-model="model"
                     on-change="onChange({sourceId: sourceId, project: project, band: band})"
                   ></rf-input-node>
                   <rf-operation-node
                     ng-if="model.get('cellType') === 'function'"
+                    ng-show="showBody && !showHistogram"
                     data-model="model"
                   ></rf-operation-node>
                   <rf-constant-node
                     ng-if="model.get('cellType') === 'const'"
+                    ng-show="showBody && !showHistogram"
                     data-model="model"
                     on-change="onChange({override: override})"
                   ></rf-constant-node>
+                  <rf-node-histogram
+                    ng-if="showHistogram && showBody"
+                    data-histogram="histogram"
+                    data-breakpoints="breakpoints"
+                    data-options="histogramOptions"
+                    data-masks="masks"
+                    on-breakpoint-change="onBreakpointChange(breakpoints)"
+                  ></rf-node-histogram>
                 </div>`,
             initialize: function () {
                 _.bindAll(this, 'updateBox');
@@ -74,11 +104,71 @@ export default class DiagramContainerController {
                 this.model.on('change', this.updateBox, this);
                 this.$box = angular.element(this.template);
                 this.scope = $scope.$new();
+                this.scope.showBody = true;
+                this.scope.histogram = exampleData;
+                this.scope.breakpoints = {
+                    1: { value: 25, style: 'bar', alwaysShowNumbers: true, color: 'red' },
+                    2: { value: 50, style: 'arrow', alwaysShowNumbers: false, color: 'orange'},
+                    3: { value: 75, style: 'arrow', alwaysShowNumbers: false, color: 'yellow'},
+                    4: { value: 100, style: 'arrow', alwaysShowNumbers: false, color: 'green'},
+                    5: { value: 125, style: 'arrow', alwaysShowNumbers: false, color: 'blue'},
+                    6: { value: 150, style: 'arrow', alwaysShowNumbers: false, color: '#4b0082'},
+                    7: { value: 175, style: 'bar', alwaysShowNumbers: true, color: '#9a2be2' }
+                };
+                this.scope.histogramOptions = {
+                    min: 0,
+                    max: 255,
+                    discrete: false
+                };
+                this.scope.masks = {
+                    min: false,
+                    max: false
+                };
+                let dropdownHeight = 200;
+                let headerHeight = 50;
+                this.histogramHeight = dropdownHeight + headerHeight;
+
+                this.scope.toggleHistogram = () => {
+                    this.scope.showHistogram = !this.scope.showHistogram;
+                    if (this.scope.showHistogram && !this.scope.showBody) {
+                        this.scope.toggleBody();
+                    } else if (this.scope.showHistogram) {
+                        this.expandedSize = this.model.getBBox();
+                        this.model.resize(this.expandedSize.width, this.histogramHeight);
+                    } else if (this.scope.showBody) {
+                        this.model.resize(this.expandedSize.width, this.expandedSize.height);
+                    }
+                };
+
+                this.scope.onBreakpointChange = (breakpoints) => {
+                    // console.log(JSON.stringify(breakpoints));
+                };
+
+                this.scope.toggleBody = () => {
+                    this.scope.showBody = !this.scope.showBody;
+                    if (!this.scope.showBody) {
+                        if (!this.scope.showHistogram) {
+                            this.expandedSize = this.model.getBBox();
+                        }
+                        this.model.resize(this.expandedSize.width, 50);
+                    } else if (this.scope.showHistogram) {
+                        this.model.resize(this.expandedSize.width, this.histogramHeight);
+                    } else {
+                        this.model.resize(this.expandedSize.width, this.expandedSize.height);
+                    }
+                };
+
+                this.scope.onPreview = _.first(this.model.get('contextMenu')
+                                               .filter((item) => item.label === 'View output')
+                                               .map((item) => item.callback)
+                                              );
+
                 $compile(this.$box)(this.scope);
 
                 this.updateBox();
             },
             render: function () {
+                console.log('render');
                 joint.dia.ElementView.prototype.render.apply(this, arguments);
                 this.paper.$el.prepend(this.$box);
                 this.updateBox();
@@ -111,10 +201,12 @@ export default class DiagramContainerController {
                 return this;
             },
             updateBox: function () {
+                console.log('update box');
                 let bbox = this.model.getBBox();
                 if (this.model !== this.scope.model) {
                     this.scope.onChange = this.model.get('onChange');
                     this.scope.sourceId = this.model.get('id');
+                    this.scope.toolrun = this.model.get('toolrun');
                     this.scope.model = this.model;
                 }
 
@@ -151,6 +243,15 @@ export default class DiagramContainerController {
         this.$rootScope.$on('lab.resize', () => {
             this.$timeout(this.onWindowResize, 100);
         });
+    }
+
+    $onChanges(changes) {
+        if (changes.toolrun) {
+            this.shapes.forEach((shape) => {
+                let model = this.paper.getModelById(shape.attributes.id);
+                model.attr('toolrun', changes.toolrun.currentValue);
+            });
+        }
     }
 
     $onDestroy() {
