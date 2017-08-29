@@ -24,9 +24,7 @@ export default class HistogramBreakpointController {
             this.breakpointPosition = '0%';
         }
         this.$scope.$watch('$ctrl.breakpoint', this.setPositionFromBreakpoint.bind(this));
-        this.$log.log(this.options, this.breakpoint);
         this.options = Object.assign({}, defaultOptions, this.options);
-        this.$log.log(this.options, this.breakpoint);
     }
 
     validateBreakpoint(value) {
@@ -79,7 +77,6 @@ export default class HistogramBreakpointController {
     }
 
     onMouseMove(event) {
-        // console.log(event.target, event.target.tagName, event.target.classList);
         if (event.target && event.target.classList.contains('graph-container')){
             event.stopPropagation();
             let width = this.parent.width();

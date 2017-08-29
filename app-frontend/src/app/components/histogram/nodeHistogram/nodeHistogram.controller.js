@@ -28,7 +28,16 @@ export default class NodeHistogramController {
             }
         });
         this.$scope.$watch('$ctrl.options.discrete', () => {
-            this.refreshHistogram();
+            if (this.refreshHistogram) {
+                this.refreshHistogram();
+            }
+        });
+        let apiWatch = this.$scope.$watch('$ctrl.api', (api) => {
+            if (api.refresh) {
+                this.refreshHistogram = _.throttle(this.api.refresh, 100);
+                apiWatch();
+                this.refreshHistogram();
+            }
         });
         this.api = {};
     }
@@ -183,11 +192,7 @@ export default class NodeHistogramController {
             this._breakpoints.sort((a, b) => a.breakpoint.value - b.breakpoint.value);
         }
 
-        //let breakpoints = Object.assign({min: {}, max: {}}, this._breakpoints);
         this.onBreakpointChange({breakpoints: this._breakpoints});
-        if (!this.refreshHistogram && this.api.refresh) {
-            this.refreshHistogram = _.throttle(this.api.refresh, 100);
-        }
         if (this.refreshHistogram) {
             this.refreshHistogram();
         }

@@ -168,7 +168,6 @@ export default class DiagramContainerController {
                 this.updateBox();
             },
             render: function () {
-                console.log('render');
                 joint.dia.ElementView.prototype.render.apply(this, arguments);
                 this.paper.$el.prepend(this.$box);
                 this.updateBox();
@@ -201,7 +200,6 @@ export default class DiagramContainerController {
                 return this;
             },
             updateBox: function () {
-                console.log('update box');
                 let bbox = this.model.getBBox();
                 if (this.model !== this.scope.model) {
                     this.scope.onChange = this.model.get('onChange');
@@ -246,7 +244,7 @@ export default class DiagramContainerController {
     }
 
     $onChanges(changes) {
-        if (changes.toolrun) {
+        if (changes.toolrun && this.shapes) {
             this.shapes.forEach((shape) => {
                 let model = this.paper.getModelById(shape.attributes.id);
                 model.attr('toolrun', changes.toolrun.currentValue);
