@@ -9,6 +9,7 @@ export default (app) => {
 
             let viridis = colorSchemeService.defaultColorSchemes.find(s => s.label === 'Viridis');
             let linspace = this.linspace;
+            let getNodeChildren = this.getNodeChildren.bind(this);
 
             joint.shapes.html = {};
             joint.shapes.html.Element = joint.shapes.basic.Rect.extend({
@@ -77,8 +78,9 @@ export default (app) => {
                   ></rf-constant-node>
                   <rf-classify-node
                     ng-if="ifCellType('classify')"
-                    ng-show="showCellBody"
+                    ng-show="showCellBody()"
                     data-model="model"
+                    data-child="children[0]"
                     on-change="onChange({override: override})"
                   ></rf-classify-node>
                   <rf-node-histogram
@@ -311,6 +313,11 @@ export default (app) => {
                         this.scope.model = this.model;
                     }
 
+                    if (this.model.get('toolrun')) {
+                        this.scope.children =
+                            getNodeChildren(this.model.get('toolrun'), this.model.get('id'));
+                    }
+
                     if (!this.scope.breakpoints) {
                         let breakpoints = linspace(0, 255, viridis.colors.length);
                         this.scope.breakpoints = breakpoints.map((value, index) => {
@@ -380,6 +387,23 @@ export default (app) => {
                 }
             }
             return inputsJson;
+        }
+
+        flattenToolDefinition(toolDefinition) {
+            let tool = toolDefinition.executionParameters || toolDefinition;
+            let inQ = [tool];
+            let outQ = [];
+            while (inQ.length) {
+                let node = inQ.pop();
+                outQ.push(node);
+                if (node.args) {
+                    inQ = [
+                        ...inQ,
+                        ...node.args.map(a => Object.assign({}, a, { parent: node }))
+                    ];
+                }
+            }
+            return outQ;
         }
 
         getNodeLabel(json) {
@@ -579,6 +603,11 @@ export default (app) => {
             return {
                 shapes, nodes
             };
+        }
+
+        getNodeChildren(toolDefinition, nodeId) {
+            return this.flattenToolDefinition(toolDefinition)
+                .filter(n => n.parent && n.parent.id === nodeId);
         }
     }
 
