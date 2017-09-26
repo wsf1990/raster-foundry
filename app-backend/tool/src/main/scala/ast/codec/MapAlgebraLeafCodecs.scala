@@ -48,30 +48,31 @@ trait MapAlgebraLeafCodecs {
     }
   }
 
-  implicit lazy val decodeSource: Decoder[MapAlgebraAST.Source] =
-    Decoder.forProduct2("id", "metadata")(MapAlgebraAST.Source.apply)
+  implicit lazy val decodeSource: Decoder[MapAlgebraAST.Source] = Decoder.instance[MapAlgebraAST.Source] { _ =>
+    Right(MapAlgebraAST.Source())
+  }
   implicit lazy val encodeSource: Encoder[MapAlgebraAST.Source] =
-    Encoder.forProduct3("type", "id", "metadata")(src => (src.`type`, src.id, src.metadata))
+    Encoder.forProduct1("type")(src => (src.`type`))
 
   implicit lazy val decodeSceneSource: Decoder[MapAlgebraAST.SceneRaster] =
-    Decoder.forProduct5("id", "sceneId", "band", "celltype", "metadata")(MapAlgebraAST.SceneRaster.apply)
+    Decoder.forProduct3("sceneId", "band", "celltype")(MapAlgebraAST.SceneRaster.apply)
   implicit lazy val encodeSceneSource: Encoder[MapAlgebraAST.SceneRaster] =
-    Encoder.forProduct6("type", "id", "sceneId", "band", "celltype", "metadata")(src => (src.`type`, src.id, src.sceneId, src.band, src.celltype, src.metadata))
+    Encoder.forProduct4("type", "sceneId", "band", "celltype")(src => (src.`type`, src.sceneId, src.band, src.celltype))
 
   implicit lazy val decodeProjectSource: Decoder[MapAlgebraAST.ProjectRaster] =
-    Decoder.forProduct5("id", "projId", "band", "celltype", "metadata")(MapAlgebraAST.ProjectRaster.apply)
+    Decoder.forProduct3("projId", "band", "celltype")(MapAlgebraAST.ProjectRaster.apply)
   implicit lazy val encodeProjectSource: Encoder[MapAlgebraAST.ProjectRaster] =
-    Encoder.forProduct6("type", "id", "projId", "band", "celltype", "metadata")(src => (src.`type`, src.id, src.projId, src.band, src.celltype, src.metadata))
+    Encoder.forProduct4("type", "projId", "band", "celltype")(src => (src.`type`, src.projId, src.band, src.celltype))
 
   implicit lazy val decodeConstant: Decoder[MapAlgebraAST.Constant] =
-    Decoder.forProduct3("id", "constant", "metadata")(MapAlgebraAST.Constant.apply)
+    Decoder.forProduct1("constant")(MapAlgebraAST.Constant.apply)
   implicit lazy val encodeConstant: Encoder[MapAlgebraAST.Constant] =
-    Encoder.forProduct4("type", "id", "constant", "metadata")(const => (const.`type`, const.id, const.constant, const.metadata))
+    Encoder.forProduct2("type", "constant")(const => (const.`type`, const.constant))
 
   implicit lazy val decodeReference: Decoder[MapAlgebraAST.ToolReference] =
-    Decoder.forProduct2("id", "toolId")(MapAlgebraAST.ToolReference.apply)
+    Decoder.forProduct1("toolId")(MapAlgebraAST.ToolReference.apply)
   implicit lazy val encodeReference: Encoder[MapAlgebraAST.ToolReference] =
-    Encoder.forProduct3("type", "id", "toolId")(ref => (ref.`type`, ref.id, ref.toolId))
+    Encoder.forProduct2("type", "toolId")(ref => (ref.`type`, ref.toolId))
 
   implicit lazy val celltypeDecoder: Decoder[CellType] =
     Decoder[String].map({ CellType.fromName(_) })

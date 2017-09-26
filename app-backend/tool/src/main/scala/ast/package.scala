@@ -22,7 +22,7 @@ package object ast extends MapAlgebraCodec {
     assembled: Map[UUID, MapAlgebraAST] = Map()
   )(implicit ec: ExecutionContext): OptionT[Future, Map[UUID, MapAlgebraAST]] =
     ast match {
-      case ToolReference(id, refId) =>
+      case ToolReference(refId) =>
         OptionT(substitutionResolver(refId)).flatMap({ astPatch =>
           // Here's where we can hope to catch cycles as we traverse down
           //  the tree (keeping track of previously encountered references)
@@ -60,31 +60,25 @@ package object ast extends MapAlgebraCodec {
   }
 
   implicit class MapAlgebraASTHelperMethods(val self: MapAlgebraAST) {
-    private def generateMetadata = Some(NodeMetadata(
-      Some(s"${self.metadata.flatMap(_.label).getOrElse(self.id)}"),
-      None,
-      None
-    ))
-
     def classify(classmap: ClassMap) =
-      MapAlgebraAST.Classification(List(self), UUID.randomUUID(), generateMetadata, classmap)
+      MapAlgebraAST.Classification(List(self), classmap)
 
     def +(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Addition(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Addition(List(self, other))
 
     def -(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Subtraction(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Subtraction(List(self, other))
 
     def *(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Multiplication(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Multiplication(List(self, other))
 
     def /(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Division(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Division(List(self, other))
 
     def max(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Max(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Max(List(self, other))
 
     def min(other: MapAlgebraAST): MapAlgebraAST.Operation =
-      MapAlgebraAST.Min(List(self, other), UUID.randomUUID(), generateMetadata)
+      MapAlgebraAST.Min(List(self, other))
   }
 }

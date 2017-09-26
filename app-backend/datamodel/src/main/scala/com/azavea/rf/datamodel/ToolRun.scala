@@ -17,7 +17,8 @@ case class ToolRun(
   visibility: Visibility,
   organizationId: UUID,
   tool: UUID,
-  executionParameters: Json
+  ast: Json,
+  metadata: Map[Int, NodeMetadata]
 )
 
 object ToolRun {
