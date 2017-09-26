@@ -18,37 +18,37 @@ sealed trait InterpreterError {
 }
 
 /** An unbound parameter encountered during evaluation  */
-case class MissingParameter(id: UUID) extends InterpreterError {
+case class MissingParameter(id: Int) extends InterpreterError {
   val scope = id.toString
   def repr = s"Unbound parameter at $scope encountered, unable to evaluate"
 }
 
-case class IncorrectArgCount(id: UUID, expected: Int, actual: Int) extends InterpreterError {
+case class IncorrectArgCount(id: Int, expected: Int, actual: Int) extends InterpreterError {
   val scope = id.toString
   def repr = s"Operation ${scope} was given ${actual} args, but expected ${expected}"
 }
 
-case class UnhandledCase(id: UUID) extends InterpreterError {
+case class UnhandledCase(id: Int) extends InterpreterError {
   val scope = id.toString
   def repr = s"Some branch of Interpreter logic has yet to be implemented: ${id}"
 }
 
-case class UnsubstitutedRef(id: UUID) extends InterpreterError {
+case class UnsubstitutedRef(id: Int) extends InterpreterError {
   val scope = id.toString
   def repr = s"Unsubstituted Tool reference found: ${id}"
 }
 
-case class NoSourceLeaves(id: UUID) extends InterpreterError {
+case class NoSourceLeaves(id: Int) extends InterpreterError {
   val scope = id.toString
   def repr = s"The Operation ${id} has only Constant leaves"
 }
 
-case class NoBandGiven(id: UUID) extends InterpreterError {
+case class NoBandGiven(id: Int) extends InterpreterError {
   val scope = "i/o"
   def repr = s"No band value given for Scene ${id}"
 }
 
-case class AttributeStoreFetchError(id: UUID) extends InterpreterError {
+case class AttributeStoreFetchError(id: Int) extends InterpreterError {
   val scope = "i/o"
   def repr = s"Unable to fetch an S3AttributeStore for Scene ${id}"
 }
@@ -67,11 +67,6 @@ case class DatabaseError(id: UUID) extends InterpreterError {
 case class ASTDecodeError(msg: DecodingFailure) extends InterpreterError {
   val scope = "global"
   def repr = s"Unable to decode AST: ${msg}"
-}
-
-case class InvalidOverride(id: UUID) extends InterpreterError {
-  val scope = id.toString
-  def repr = s"Node ${id} was given an incompatible override value"
 }
 
 case class LazyTileEvaluationError(ast: MapAlgebraAST) extends InterpreterError {

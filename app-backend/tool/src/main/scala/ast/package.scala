@@ -1,5 +1,6 @@
 package com.azavea.rf.tool
 
+import com.azavea.rf.datamodel.ClassMap
 import com.azavea.rf.tool.ast._
 import com.azavea.rf.tool.ast.MapAlgebraAST._
 import com.azavea.rf.tool.ast.codec.MapAlgebraCodec

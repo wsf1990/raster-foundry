@@ -56,7 +56,7 @@ trait ToolRunRoutes extends Authentication
         onSuccess(write(ToolRuns.insertToolRun(newRun, user))) { toolRun =>
           handleExceptions(interpreterExceptionHandler) {
             complete {
-              newRun.executionParameters.as[MapAlgebraAST] match {
+              newRun.ast.as[MapAlgebraAST] match {
                 case Right(ast) =>
                   validateTreeWithSources[Unit](ast)
                   (StatusCodes.Created, toolRun)

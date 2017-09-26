@@ -1,5 +1,6 @@
 package com.azavea.rf.tool.ast
 
+import com.azavea.rf.datamodel.ClassMap
 import com.azavea.rf.tool.eval.LazyTile
 
 import io.circe.generic.JsonCodec
@@ -14,6 +15,11 @@ import java.util.UUID
 /** The ur-type for a recursive representation of MapAlgebra operations */
 sealed trait MapAlgebraAST extends Product with Serializable {
   var id: Int = Int.MinValue
+  def withId(id: Int) = {
+    this.id = id
+    this
+  }
+  val symbol: String
   def withIds: MapAlgebraAST = {
     var currentId = 0
     def assignId(ast: MapAlgebraAST): MapAlgebraAST = {
@@ -58,8 +64,6 @@ sealed trait MapAlgebraAST extends Product with Serializable {
 object MapAlgebraAST {
   /** Map Algebra operations (nodes in this tree) */
   sealed trait Operation extends MapAlgebraAST with Serializable {
-
-    val symbol: String
 
     @SuppressWarnings(Array("TraversableHead"))
     def find(id: Int): Option[MapAlgebraAST] =
@@ -351,7 +355,7 @@ object MapAlgebraAST {
   }
 
   sealed trait MapAlgebraLeaf extends MapAlgebraAST {
-    val `type`: String
+    val symbol: String
     def args: List[MapAlgebraAST] = List.empty
     def find(id: Int): Option[MapAlgebraAST] =
       if (this.id == id) Some(this)
@@ -360,35 +364,33 @@ object MapAlgebraAST {
   }
 
   case class Constant(constant: Double) extends MapAlgebraLeaf {
-    val `type` = "const"
+    val symbol = "const"
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = List()
   }
 
   /** Map Algebra sources */
   case class Source() extends MapAlgebraLeaf {
-    val `type` = "src"
+    val symbol = "src"
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = List(this)
   }
 
   case class LiteralRaster(lt: LazyTile) extends MapAlgebraLeaf {
-    val `type` = "rasterLiteral"
+    val symbol = "rasterLiteral"
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = List(this)
   }
 
   case class SceneRaster(sceneId: UUID, band: Option[Int], celltype: Option[CellType]) extends MapAlgebraLeaf with RFMLRaster {
-    val `type` = "sceneSrc"
+    val symbol = "sceneSrc"
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = List(this)
   }
 
   case class ProjectRaster(projId: UUID, band: Option[Int], celltype: Option[CellType]) extends MapAlgebraLeaf with RFMLRaster {
-    val `type` = "projectSrc"
+    val symbol = "projectSrc"
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = List(this)
   }
 
   case class ToolReference(toolId: UUID) extends MapAlgebraLeaf {
-    val `type` = "ref"
-
-    def metadata: Option[NodeMetadata] = None
+    val symbol = "ref"
     def sources: List[MapAlgebraAST.MapAlgebraLeaf] = List()
   }
 }

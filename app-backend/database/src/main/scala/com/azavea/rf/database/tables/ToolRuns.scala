@@ -21,7 +21,7 @@ class ToolRuns(_TableTag: Tag) extends Table[ToolRun](_TableTag, "tool_runs")
     with TimestampFields {
 
   def * = (id, createdAt, createdBy, modifiedAt, modifiedBy, owner, visibility,
-           organizationId, toolId, executionParameters) <> (ToolRun.tupled, ToolRun.unapply _)
+           organizationId, toolId, ast, metadata) <> (ToolRun.tupled, ToolRun.unapply _)
 
   val id: Rep[UUID]  = column[UUID]("id", O.PrimaryKey)
   val createdAt: Rep[Timestamp] = column[Timestamp]("created_at")
@@ -32,7 +32,8 @@ class ToolRuns(_TableTag: Tag) extends Table[ToolRun](_TableTag, "tool_runs")
   val visibility: Rep[Visibility] = column[Visibility]("visibility")
   val organizationId: Rep[UUID] = column[UUID]("organization")
   val toolId: Rep[UUID] = column[UUID]("tool")
-  val executionParameters: Rep[Json] = column[Json]("execution_parameters")
+  val ast: Rep[Json] = column[Json]("ast")
+  val metadata: Rep[Json] = column[Json]("metadata")
 
   lazy val createdByUserFK = foreignKey("tool_runs_created_by_fkey", createdBy, Users)(r => r.id, onUpdate=ForeignKeyAction.NoAction, onDelete=ForeignKeyAction.NoAction)
   lazy val modifiedByUserFK = foreignKey("tool_runs_modified_by_fkey", modifiedBy, Users)(r => r.id, onUpdate=ForeignKeyAction.NoAction, onDelete=ForeignKeyAction.NoAction)
@@ -84,13 +85,13 @@ object ToolRuns extends TableQuery(tag => new ToolRuns(tag)) with LazyLogging {
     } yield (
       updateToolRun.modifiedAt,
       updateToolRun.modifiedBy,
-      updateToolRun.executionParameters
+      updateToolRun.ast
     )
 
     updateToolRunQuery.update(
       updateTime,
       user.id,
-      tr.executionParameters
+      tr.ast
     )
   }
 

@@ -63,12 +63,12 @@ object TileSources extends LazyLogging {
     * histogram.
     */
   def dataWindow(r: RFMLRaster)(implicit database: Database): OptionT[Future, (Extent, Int)] = r match {
-    case MapAlgebraAST.SceneRaster(id, sceneId, Some(_), _, _) => {
-      implicit val sceneIds = Set(id)
+    case sr@MapAlgebraAST.SceneRaster(sceneId, Some(_), _) => {
+      implicit val sceneIds = Set(sceneId)
       OptionT.fromOption(GlobalSummary.minAcceptableSceneZoom(sceneId, store, 256))
     }
-    case MapAlgebraAST.ProjectRaster(id, projId, Some(_), _, _) => {
-      implicit val sceneIds = Set(id)
+    case pr@MapAlgebraAST.ProjectRaster(projId, Some(_), _) => {
+      implicit val sceneIds = Set(projId)
       GlobalSummary.minAcceptableProjectZoom(projId, 256)
     }
 
@@ -85,11 +85,11 @@ object TileSources extends LazyLogging {
     zoom: Int,
     r: RFMLRaster
   )(implicit database: Database): Future[Interpreted[TileWithNeighbors]] = r match {
-    case sr@MapAlgebraAST.SceneRaster(id, sceneId, Some(band), maybeND, _) =>
-      implicit val sceneIds = Set(id)
+    case sr@MapAlgebraAST.SceneRaster(sceneId, Some(band), maybeND) =>
+      implicit val sceneIds = Set(sceneId)
       Future {
           Try {
-            val layerId = LayerId(id.toString, zoom)
+            val layerId = LayerId(sr.id.toString, zoom)
 
             S3CollectionLayerReader(store)
               .query[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](layerId)
@@ -104,7 +104,7 @@ object TileSources extends LazyLogging {
               Invalid(NEL.of(RasterRetrievalError(sr)))
           }
       }
-    case pr@MapAlgebraAST.ProjectRaster(id, projId, Some(band), maybeND, _) =>
+    case pr@MapAlgebraAST.ProjectRaster(projId, Some(band), maybeND) =>
       Mosaic.rawForExtent(projId, zoom, Some(Projected(extent.toPolygon, 3857))).value.map({ maybeTile =>
         maybeTile match {
           case Some(tile) =>
@@ -121,7 +121,7 @@ object TileSources extends LazyLogging {
   def cachedTmsSource(r: RFMLRaster, hasBuffer: Boolean, z: Int, x: Int, y: Int)(implicit database: Database): Future[Interpreted[TileWithNeighbors]] = {
     lazy val ndtile = IntConstantTile(NODATA, 256, 256)
     r match {
-      case scene @ MapAlgebraAST.SceneRaster(id, sceneId, Some(band), maybeND, _) =>
+      case scene @ MapAlgebraAST.SceneRaster(sceneId, Some(band), maybeND) =>
         implicit val sceneIds = Set(sceneId)
         val futureSource: OptionT[Future, TileWithNeighbors] = if (hasBuffer)
           (for {
@@ -166,12 +166,12 @@ object TileSources extends LazyLogging {
         })
 
 
-      case scene @ MapAlgebraAST.SceneRaster(id, sceneId, None, _, _) =>
+      case scene @ MapAlgebraAST.SceneRaster(sceneId, None, _) =>
         implicit val sceneIds = Set(sceneId)
         logger.warn(s"Request for $scene does not contain band index")
-        Future.successful(Invalid(NEL.of(NoBandGiven(id))))
+        Future.successful(Invalid(NEL.of(NoBandGiven(scene.id))))
 
-      case project @ MapAlgebraAST.ProjectRaster(id, projId, Some(band), maybeND, _) =>
+      case project @ MapAlgebraAST.ProjectRaster(projId, Some(band), maybeND) =>
         val futureSource = if (hasBuffer)
           (for {
             tl <- Mosaic.raw(projId, z, x - 1, y - 1)
@@ -215,9 +215,9 @@ object TileSources extends LazyLogging {
         })
 
 
-      case project @ MapAlgebraAST.ProjectRaster(id, projId, None, _, _) =>
+      case project @ MapAlgebraAST.ProjectRaster(projId, None, _) =>
         logger.warn(s"Request for $project does not contain band index")
-        Future.successful(Invalid(NEL.of(NoBandGiven(id))))
+        Future.successful(Invalid(NEL.of(NoBandGiven(project.id))))
 
       case r: MapAlgebraAST =>
         Future.successful(Invalid(NEL.of(RasterRetrievalError(r))))

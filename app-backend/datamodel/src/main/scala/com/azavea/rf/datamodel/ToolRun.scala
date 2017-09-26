@@ -18,7 +18,7 @@ case class ToolRun(
   organizationId: UUID,
   tool: UUID,
   ast: Json,
-  metadata: Map[Int, NodeMetadata]
+  metadata: Json
 )
 
 object ToolRun {
@@ -30,8 +30,9 @@ object ToolRun {
     visibility: Visibility,
     organizationId: UUID,
     tool: UUID,
-    executionParameters: Json,
-    owner: Option[String]
+    ast: Json,
+    owner: Option[String],
+    metadata: Json
   ) extends OwnerCheck {
     def toToolRun(user: User): ToolRun = {
 
@@ -49,7 +50,8 @@ object ToolRun {
         visibility,
         organizationId,
         tool,
-        executionParameters
+        ast,
+        metadata
       )
     }
   }

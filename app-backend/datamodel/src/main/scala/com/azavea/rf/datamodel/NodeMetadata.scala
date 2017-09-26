@@ -1,4 +1,4 @@
-package com.azavea.rf.tool.ast
+package com.azavea.rf.datamodel
 
 import com.azavea.rf.tool._
 import com.azavea.rf.tool.ast.codec.MapAlgebraCodec
@@ -32,7 +32,7 @@ case class NodeMetadata(
   }
 }
 
-object NodeMetadata extends MapAlgebraCodec {
+object NodeMetadata {
   implicit val nodeMetadataEncoder: Encoder[NodeMetadata] =
     Encoder.forProduct7("label", "description", "histogram", "colorRamp", "classMap", "breaks", "renderDefinition")(nmd =>
       (nmd.label, nmd.description, nmd.histogram, nmd.colorRamp, nmd.classMap, nmd.breaks, nmd.renderDef)

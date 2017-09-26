@@ -1,12 +1,12 @@
-package com.azavea.rf.tool
+package com.azavea.rf.datamodel
 
-import com.azavea.rf.tool._
+import com.azavea.rf.bridge._
 
-import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 import io.circe.parser.decode
+import cats.syntax.either._
 import org.scalatest._
 import geotrellis.raster.render._
 

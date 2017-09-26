@@ -57,10 +57,10 @@ package object ast {
     h: (RDD[(SpatialKey, Tile)], Double) => RDD[(SpatialKey, Tile)],
     i: (RDD[(SpatialKey, Tile)], RDD[(SpatialKey, Tile)]) => RDD[(SpatialKey, Tile)],
     asts: List[MapAlgebraAST],
-    rdds: Map[UUID, TileLayerRDD[SpatialKey]]
+    rdds: Map[Int, TileLayerRDD[SpatialKey]]
   ): Either[Double, TileLayerRDD[SpatialKey]] = {
     asts.map({
-      case Constant(_, c, _) => Left(c)
+      case Constant(c) => Left(c)
       case ast => eval(ast, rdds)
     }).reduceLeft[Either[Double, TileLayerRDD[SpatialKey]]]({
       case (Left(c1), Left(c2))       => Left(f(c1, c2))
@@ -74,89 +74,90 @@ package object ast {
   @SuppressWarnings(Array("TraversableHead"))
   private def eval(
     ast: MapAlgebraAST,
-    rdds: Map[UUID, TileLayerRDD[SpatialKey]]
+    rdds: Map[Int, TileLayerRDD[SpatialKey]]
   ): Either[Double, TileLayerRDD[SpatialKey]] = ast match {
     /* --- LEAVES --- */
-    case SceneRaster(id, _, _, _, _) => Right(rdds(id))
-    case ProjectRaster(id, _, _, _, _) => Right(rdds(id))
-    case Source(id, _) => Right(rdds(id))
-    case LiteralRaster(_, _, _) =>
+    case sr@SceneRaster(_, _, _) => Right(rdds(sr.id))
+    case pr@ProjectRaster(_, _, _) => Right(rdds(pr.id))
+    case Source() =>
       sys.error("Export: If you're seeing this, there is an error in the AST validation logic.")
-    case Constant(id, const, _) =>
+    case LiteralRaster(_) =>
       sys.error("Export: If you're seeing this, there is an error in the AST validation logic.")
-    case ToolReference(_, _) =>
+    case Constant(const) =>
+      sys.error("Export: If you're seeing this, there is an error in the AST validation logic.")
+    case ToolReference(_) =>
       sys.error("Export: If you're seeing this, there is an error in the AST validation logic.")
 
     /* --- BINARY OPERATIONS --- */
-    case Addition(args, _, _) => reduce({_ + _}, {_ +: _}, {_ + _}, {_ + _}, args, rdds)
-    case Subtraction(args, _, _) => reduce({_ - _}, {_ -: _}, {_ - _}, {_ - _}, args, rdds)
-    case Multiplication(args, _, _) => reduce({_ * _}, {_ *: _}, {_ * _}, {_ * _}, args, rdds)
-    case Division(args, _, _) => reduce({_ / _}, {_ /: _}, {_ / _}, {_ / _}, args, rdds)
-    case Max(args, _, _) =>
+    case Addition(args) => reduce({_ + _}, {_ +: _}, {_ + _}, {_ + _}, args, rdds)
+    case Subtraction(args) => reduce({_ - _}, {_ -: _}, {_ - _}, {_ - _}, args, rdds)
+    case Multiplication(args) => reduce({_ * _}, {_ *: _}, {_ * _}, {_ * _}, args, rdds)
+    case Division(args) => reduce({_ / _}, {_ /: _}, {_ / _}, {_ / _}, args, rdds)
+    case Max(args) =>
       reduce({_.max(_)}, { (c, rdd) => rdd.localMax(c) }, {_.localMax(_)}, {_.localMax(_)}, args, rdds)
-    case Min(args, _, _) =>
+    case Min(args) =>
       reduce({_.min(_)}, { (c, rdd) => rdd.localMin(c) }, {_.localMin(_)}, {_.localMin(_)}, args, rdds)
 
     /* --- UNARY OPERATIONS --- */
-    case Equality(args, id, _) =>
+    case Equality(args) =>
       reduce({(x, y) => if (GTEqual.compare(x, y)) 1 else 0 }, {(d, r) => r.localEqual(d)}, {_ localEqual _}, {_ localEqual _}, args, rdds)
-    case Inequality(args, id, _) =>
+    case Inequality(args) =>
       reduce({(x, y) => if (GTUnequal.compare(x, y)) 1 else 0 }, {(d, r) => r.localUnequal(d)}, {_ localUnequal _}, {_ localUnequal _}, args, rdds)
-    case Greater(args, id, _) =>
+    case Greater(args) =>
       reduce({(x, y) => if (GTGreater.compare(x, y)) 1 else 0 }, {(d, r) => r.localGreater(d)}, {_ localGreater _}, {_ localGreater _}, args, rdds)
-    case GreaterOrEqual(args, id, _) =>
+    case GreaterOrEqual(args) =>
       reduce({(x, y) => if (GTGreaterOrEqual.compare(x, y)) 1 else 0 }, {(d, r) => r.localGreaterOrEqual(d)}, {_ localGreaterOrEqual _}, {_ localGreaterOrEqual _}, args, rdds)
-    case Less(args, id, _) =>
+    case Less(args) =>
       reduce({(x, y) => if (GTLess.compare(x, y)) 1 else 0 }, {d2i(_) <<: _}, {_ < d2i(_)}, {(d, r) => r.localLess(d)}, args, rdds)
-    case LessOrEqual(args, id, _) =>
+    case LessOrEqual(args) =>
       reduce({(x, y) => if (GTLessOrEqual.compare(x, y)) 1 else 0 }, {d2i(_) <=: _}, {_ <= d2i(_)}, {(d, r) => r.localLessOrEqual(d) }, args, rdds)
-    case And(args, id, _) =>
+    case And(args) =>
       reduce(GTAnd.combine, {d2i(_) &: _}, {_ & d2i(_)}, {(d, r) => r.localAnd(d)}, args, rdds )
-    case Or(args, id, _) =>
+    case Or(args) =>
       reduce(GTOr.combine, {d2i(_) |: _}, {_ | d2i(_)}, {(d, r) => r.localOr(d)}, args, rdds)
-    case Xor(args, id, _) =>
+    case Xor(args) =>
       reduce(GTXor.combine, {d2i(_) ^: _}, {_ ^ d2i(_)}, {(rdd1, rdd2) => rdd1.combineValues(rdd2, None)({ (t1, t2) => t1.combineDouble(t2)(GTXor.combine) }) }, args, rdds)
-    case Pow(args, id, _) =>
+    case Pow(args) =>
       reduce(GTPow.combine, {(d, r) => r.localPow(d)}, {_ localPow _}, {_ localPow _}, args, rdds)
-    case Atan2(args, id, _) =>
+    case Atan2(args) =>
       reduce(math.atan2, {(dbl, rdd) => rdd.mapValues(_.mapDouble(math.atan2(dbl, _))) }, {(rdd, dbl) => rdd.mapValues(_.mapDouble(math.atan2(dbl, _))) }, {(rdd1, rdd2) => rdd1.combineValues(rdd2, None)({ (t1, t2) => t1.combineDouble(t2)(math.atan2) }) }, args, rdds)
 
     /* --- Unary Operations --- */
     /* The `head` calls here will never fail, nor will they produce a `Constant` */
-    case Classification(args, _, _, classMap) =>
+    case Classification(args, classMap) =>
       eval(args.head, rdds).map(_.withContext(_.color(classMap.toColorMap)))
-    case Masking(args, _, _, mask) =>
+    case Masking(args, mask) =>
       eval(args.head, rdds).map(_.mask(mask))
-    case IsDefined(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localDefined))
-    case IsUndefined(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localUndefined))
-    case SquareRoot(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localSqrt))
-    case Log(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localLog))
-    case Log10(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localLog10))
-    case Round(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localRound))
-    case Floor(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localFloor))
-    case Ceil(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localCeil))
-    case NumericNegation(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localNegate))
-    case LogicalNegation(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localNot)) // TODO: DO NOT USE THIS
-    case Abs(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localAbs))
-    case Sin(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.sin(_))))
-    case Cos(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.cos(_))))
-    case Tan(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.tan(_))))
-    case Asin(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.asin(_))))
-    case Acos(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.acos(_))))
-    case Atan(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.atan(_))))
-    case Sinh(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.sinh(_))))
-    case Cosh(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.cosh(_))))
-    case Tanh(args, id, _) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.tanh(_))))
+    case IsDefined(args) => eval(args.head, rdds).map(_.withContext(_.localDefined))
+    case IsUndefined(args) => eval(args.head, rdds).map(_.withContext(_.localUndefined))
+    case SquareRoot(args) => eval(args.head, rdds).map(_.withContext(_.localSqrt))
+    case Log(args) => eval(args.head, rdds).map(_.withContext(_.localLog))
+    case Log10(args) => eval(args.head, rdds).map(_.withContext(_.localLog10))
+    case Round(args) => eval(args.head, rdds).map(_.withContext(_.localRound))
+    case Floor(args) => eval(args.head, rdds).map(_.withContext(_.localFloor))
+    case Ceil(args) => eval(args.head, rdds).map(_.withContext(_.localCeil))
+    case NumericNegation(args) => eval(args.head, rdds).map(_.withContext(_.localNegate))
+    case LogicalNegation(args) => eval(args.head, rdds).map(_.withContext(_.localNot)) // TODO: DO NOT USE THIS
+    case Abs(args) => eval(args.head, rdds).map(_.withContext(_.localAbs))
+    case Sin(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.sin(_))))
+    case Cos(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.cos(_))))
+    case Tan(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.tan(_))))
+    case Asin(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.asin(_))))
+    case Acos(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.acos(_))))
+    case Atan(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.atan(_))))
+    case Sinh(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.sinh(_))))
+    case Cosh(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.cosh(_))))
+    case Tanh(args) => eval(args.head, rdds).map(_.withContext(_.localMapDouble(math.tanh(_))))
 
 
     /* The `head` calls here will never fail, nor will they produce a `Constant` */
-    case FocalMax(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalMax(neighborhood))
-    case FocalMin(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalMin(neighborhood))
-    case FocalMean(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalMean(neighborhood))
-    case FocalMedian(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalMedian(neighborhood))
-    case FocalMode(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalMode(neighborhood))
-    case FocalSum(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalSum(neighborhood))
-    case FocalStdDev(args, _, _, neighborhood) => eval(args.head, rdds).map(_.focalStandardDeviation(neighborhood))
+    case FocalMax(args, neighborhood) => eval(args.head, rdds).map(_.focalMax(neighborhood))
+    case FocalMin(args, neighborhood) => eval(args.head, rdds).map(_.focalMin(neighborhood))
+    case FocalMean(args, neighborhood) => eval(args.head, rdds).map(_.focalMean(neighborhood))
+    case FocalMedian(args, neighborhood) => eval(args.head, rdds).map(_.focalMedian(neighborhood))
+    case FocalMode(args, neighborhood) => eval(args.head, rdds).map(_.focalMode(neighborhood))
+    case FocalSum(args, neighborhood) => eval(args.head, rdds).map(_.focalSum(neighborhood))
+    case FocalStdDev(args, neighborhood) => eval(args.head, rdds).map(_.focalStandardDeviation(neighborhood))
   }
 
   /** Evaluate an AST of RDD Sources. Assumes that the AST's
@@ -171,11 +172,11 @@ package object ast {
 
     /* Guarantee correctness before performing Map Algebra */
     val rdds = ast.sources.filter({
-      case SceneRaster(_, _, _, _, _) | ProjectRaster(_, _, _, _, _) => true
+      case SceneRaster(_, _, _) | ProjectRaster(_, _, _) => true
       case _ => false
     }).toList.asInstanceOf[List[RFMLRaster]].map({
-      case sr@SceneRaster(id, _, _, _, _) => id -> fetch(sr, zoom, sceneLocs, projLocs)
-      case pr@ProjectRaster(id, _, _, _, _) => id -> fetch(pr, zoom, sceneLocs, projLocs)
+      case sr : SceneRaster => sr.id -> fetch(sr, zoom, sceneLocs, projLocs)
+      case pr : ProjectRaster => pr.id -> fetch(pr, zoom, sceneLocs, projLocs)
     }).toMap.sequence
 
     rdds.map({ case rs => eval(ast, rs) match {
@@ -192,9 +193,9 @@ package object ast {
     projLocs: Map[UUID, List[(UUID, String)]]
   )(implicit sc: SparkContext): Interpreted[TileLayerRDD[SpatialKey]] = raster match {
 
-    case ProjectRaster(id, _, None, _, _) => Invalid(NonEmptyList.of(NoBandGiven(id)))
-    case ProjectRaster(id, projId, Some(band), maybeND, _) => getStores(projId, projLocs) match {
-      case None => Invalid(NonEmptyList.of(AttributeStoreFetchError(id)))
+    case pr@ProjectRaster(_, None, _) => Invalid(NonEmptyList.of(NoBandGiven(pr.id)))
+    case pr@ProjectRaster(projId, Some(band), maybeND) => getStores(projId, projLocs) match {
+      case None => Invalid(NonEmptyList.of(AttributeStoreFetchError(pr.id)))
       case Some(stores) => {
         val rdds: List[TileLayerRDD[SpatialKey]] =
           stores.map({ case (sceneId, store) =>
@@ -208,12 +209,12 @@ package object ast {
         Valid(rdds.reduce(_ merge _))
       }
     }
-    case SceneRaster(id, _, None, _, _) => Invalid(NonEmptyList.of(NoBandGiven(id)))
-    case SceneRaster(id, projId, Some(band), maybeND, _) => getStore(projId, sceneLocs) match {
-      case None => Invalid(NonEmptyList.of(AttributeStoreFetchError(id)))
+    case sr@SceneRaster(_, None, _) => Invalid(NonEmptyList.of(NoBandGiven(sr.id)))
+    case sr@SceneRaster(sceneId, Some(band), maybeND) => getStore(sceneId, sceneLocs) match {
+      case None => Invalid(NonEmptyList.of(AttributeStoreFetchError(sr.id)))
       case Some(store) => {
         val rdd = S3LayerReader(store)
-          .read[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(projId.toString, zoom))
+          .read[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]](LayerId(sceneId.toString, zoom))
           .withContext({ rdd =>
             rdd.mapValues({ tile => tile.band(band).interpretAs(maybeND.getOrElse(tile.cellType)) })
           })

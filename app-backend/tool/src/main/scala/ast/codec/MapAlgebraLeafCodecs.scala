@@ -52,27 +52,27 @@ trait MapAlgebraLeafCodecs {
     Right(MapAlgebraAST.Source())
   }
   implicit lazy val encodeSource: Encoder[MapAlgebraAST.Source] =
-    Encoder.forProduct1("type")(src => (src.`type`))
+    Encoder.forProduct1("symbol")(src => (src.symbol))
 
   implicit lazy val decodeSceneSource: Decoder[MapAlgebraAST.SceneRaster] =
     Decoder.forProduct3("sceneId", "band", "celltype")(MapAlgebraAST.SceneRaster.apply)
   implicit lazy val encodeSceneSource: Encoder[MapAlgebraAST.SceneRaster] =
-    Encoder.forProduct4("type", "sceneId", "band", "celltype")(src => (src.`type`, src.sceneId, src.band, src.celltype))
+    Encoder.forProduct4("symbol", "sceneId", "band", "celltype")(src => (src.symbol, src.sceneId, src.band, src.celltype))
 
   implicit lazy val decodeProjectSource: Decoder[MapAlgebraAST.ProjectRaster] =
     Decoder.forProduct3("projId", "band", "celltype")(MapAlgebraAST.ProjectRaster.apply)
   implicit lazy val encodeProjectSource: Encoder[MapAlgebraAST.ProjectRaster] =
-    Encoder.forProduct4("type", "projId", "band", "celltype")(src => (src.`type`, src.projId, src.band, src.celltype))
+    Encoder.forProduct4("symbol", "projId", "band", "celltype")(src => (src.symbol, src.projId, src.band, src.celltype))
 
   implicit lazy val decodeConstant: Decoder[MapAlgebraAST.Constant] =
     Decoder.forProduct1("constant")(MapAlgebraAST.Constant.apply)
   implicit lazy val encodeConstant: Encoder[MapAlgebraAST.Constant] =
-    Encoder.forProduct2("type", "constant")(const => (const.`type`, const.constant))
+    Encoder.forProduct2("symbol", "constant")(const => (const.symbol, const.constant))
 
   implicit lazy val decodeReference: Decoder[MapAlgebraAST.ToolReference] =
     Decoder.forProduct1("toolId")(MapAlgebraAST.ToolReference.apply)
   implicit lazy val encodeReference: Encoder[MapAlgebraAST.ToolReference] =
-    Encoder.forProduct2("type", "toolId")(ref => (ref.`type`, ref.toolId))
+    Encoder.forProduct2("symbol", "toolId")(ref => (ref.symbol, ref.toolId))
 
   implicit lazy val celltypeDecoder: Decoder[CellType] =
     Decoder[String].map({ CellType.fromName(_) })
