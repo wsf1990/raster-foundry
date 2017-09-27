@@ -120,7 +120,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
   /** Calculate the histogram for the least resolute zoom level to automatically render tiles */
   def modelLayerGlobalHistogram(
     toolRunId: UUID,
-    subNode: Option[UUID],
+    subNode: Int,
     user: User,
     voidCache: Boolean = false
   ): OptionT[Future, Histogram[Double]] = {
@@ -187,7 +187,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
   /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
   def toolEvalRequirements(
     toolRunId: UUID,
-    subNode: Option[UUID],
+    subNode: Int,
     user: User,
     voidCache: Boolean = false
   ): OptionT[Future, MapAlgebraAST] =
@@ -198,11 +198,8 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
         traceName("LayerCache.toolEvalRequirements (no cache)") {
           for {
             toolRun <- LayerCache.toolRun(toolRunId, user)
-            ast     <- OptionT.fromOption[Future](toolRun.executionParameters.as[MapAlgebraAST].toOption)
-            subAst <- OptionT.fromOption[Future](subNode match {
-                         case Some(id) => ast.find(id)
-                         case None => Some(ast)
-                       })
+            ast     <- OptionT.fromOption[Future](toolRun.ast.as[MapAlgebraAST].toOption)
+            subAst <- OptionT.fromOption[Future](ast.find(subNode))
           } yield subAst
         }
       }
@@ -211,7 +208,7 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
   /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
   def toolRunColorMap(
     toolRunId: UUID,
-    subNode: Option[UUID],
+    subNode: Int,
     user: User,
     colorRamp: ColorRamp,
     colorRampName: String

@@ -38,7 +38,15 @@ sealed trait MapAlgebraAST extends Product with Serializable {
     assignId(this)
   }
   def args: List[MapAlgebraAST]
-  def find(id: Int): Option[MapAlgebraAST]
+
+  @SuppressWarnings(Array("TraversableHead"))
+  def find(id: Int): Option[MapAlgebraAST] =
+    if (this.id == id)
+      Some(this)
+    else {
+      val matches = args.flatMap(_.find(id))
+      matches.headOption
+    }
   def sources: Seq[MapAlgebraAST.MapAlgebraLeaf]
   def tileSources: Set[RFMLRaster] = {
     val tileList: List[RFMLRaster] = this match {
@@ -64,15 +72,6 @@ sealed trait MapAlgebraAST extends Product with Serializable {
 object MapAlgebraAST {
   /** Map Algebra operations (nodes in this tree) */
   sealed trait Operation extends MapAlgebraAST with Serializable {
-
-    @SuppressWarnings(Array("TraversableHead"))
-    def find(id: Int): Option[MapAlgebraAST] =
-      if (this.id == id)
-        Some(this)
-      else {
-        val matches = args.flatMap(_.find(id))
-        matches.headOption
-      }
 
     def sources: Seq[MapAlgebraAST.MapAlgebraLeaf] = args.flatMap(_.sources).distinct
   }
@@ -357,9 +356,6 @@ object MapAlgebraAST {
   sealed trait MapAlgebraLeaf extends MapAlgebraAST {
     val symbol: String
     def args: List[MapAlgebraAST] = List.empty
-    def find(id: Int): Option[MapAlgebraAST] =
-      if (this.id == id) Some(this)
-      else None
     def withArgs(newArgs: List[MapAlgebraAST]): MapAlgebraAST = this
   }
 

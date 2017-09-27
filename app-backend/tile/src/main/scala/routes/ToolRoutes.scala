@@ -59,11 +59,10 @@ class ToolRoutes(implicit val database: Database) extends Authentication
   def preflight(toolRunId: UUID, user: User) = {
     traceName("toolrun-preflight") {
       parameter(
-        'node.?,
+        'node ? 0,
         'voidCache.as[Boolean].?(false)
       ) { (node, void) =>
-        val nodeId = node.map(UUID.fromString(_))
-        onSuccess(LayerCache.toolEvalRequirements(toolRunId, nodeId, user, void).value) { _ =>
+        onSuccess(LayerCache.toolEvalRequirements(toolRunId, node, user, void).value) { _ =>
           complete {
             StatusCodes.NoContent
           }
@@ -80,7 +79,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
       pathPrefix("validate") {
         complete {
           for {
-            ast <- LayerCache.toolEvalRequirements(toolRunId, None, user)
+            ast <- LayerCache.toolEvalRequirements(toolRunId, 0, user)
           } yield validateTreeWithSources[Unit](ast)
           StatusCodes.NoContent
         }
@@ -93,12 +92,11 @@ class ToolRoutes(implicit val database: Database) extends Authentication
     traceName("toolrun-histogram") {
       pathPrefix("histogram") {
         parameter(
-          'node.?,
+          'node ? 0,
           'voidCache.as[Boolean].?(false)
         ) { (node, void) =>
           complete {
-            val nodeId = node.map(UUID.fromString(_))
-            LayerCache.modelLayerGlobalHistogram(toolRunId, nodeId, user, void).value
+            LayerCache.modelLayerGlobalHistogram(toolRunId, node, user, void).value
           }
         }
       }
@@ -110,12 +108,11 @@ class ToolRoutes(implicit val database: Database) extends Authentication
     traceName("toolrun-statistics") {
       pathPrefix("statistics") {
         parameter(
-          'node.?,
+          'node ? 0,
           'voidCache.as[Boolean].?(false)
         ) { (node, void) =>
           complete {
-            val nodeId = node.map(UUID.fromString(_))
-            LayerCache.modelLayerGlobalHistogram(toolRunId, nodeId, user, void).mapFilter(_.statistics).value
+            LayerCache.modelLayerGlobalHistogram(toolRunId, node, user, void).mapFilter(_.statistics).value
           }
         }
       }
@@ -132,14 +129,13 @@ class ToolRoutes(implicit val database: Database) extends Authentication
       traceName("toolrun-tms") {
         pathPrefix(IntNumber / IntNumber / IntNumber) { (z, x, y) =>
           parameter(
-            'node.?,
+            'node ? 0,
             'cramp.?("viridis")
           ) { (node, colorRampName) =>
             complete {
-              val nodeId = node.map(UUID.fromString(_))
               val colorRamp = providedRamps.get(colorRampName).getOrElse(providedRamps("viridis"))
               val responsePng: OptionT[Future, Png] = for {
-                ast   <- LayerCache.toolEvalRequirements(toolRunId, nodeId, user)
+                ast   <- LayerCache.toolEvalRequirements(toolRunId, node, user)
                 tile  <- OptionT({
                         val literalAst: Future[Interpreted[MapAlgebraAST]] = BufferingInterpreter.literalize(ast, source, z, x, y)
                         val futureTile: Future[Interpreted[Tile]] = literalAst.map({ validatedAst =>
@@ -162,7 +158,7 @@ class ToolRoutes(implicit val database: Database) extends Authentication
                           }
                         })
                       })
-                cMap  <- LayerCache.toolRunColorMap(toolRunId, nodeId, user, colorRamp, colorRampName)
+                cMap  <- LayerCache.toolRunColorMap(toolRunId, node, user, colorRamp, colorRampName)
               } yield {
                 logger.debug(s"Tile successfully produced at $z/$x/$y")
                 ast.metadata.flatMap({ md =>
