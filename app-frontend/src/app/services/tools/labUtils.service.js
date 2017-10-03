@@ -10,6 +10,7 @@ export default (app) => {
             let viridis = colorSchemeService.defaultColorSchemes.find(s => s.label === 'Viridis');
             let linspace = this.linspace;
             let getNodeChildren = this.getNodeChildren.bind(this);
+            let findInToolDefinition = this.findInToolDefinition;
 
             joint.shapes.html = {};
             joint.shapes.html.Element = joint.shapes.basic.Rect.extend({
@@ -39,14 +40,14 @@ export default (app) => {
                       <span class="icon-map"></span>
                       </button>
                       <button class="btn node-button" type="button"
-                              ng-if="model.get('cellType') !== 'const' && 
+                              ng-if="model.get('cellType') !== 'const' &&
                                model.get('cellType') !== 'src'"
                               ng-class="{'active': currentView === 'HISTOGRAM'}"
                               ng-click="toggleHistogram()">
                       <span class="icon-histogram"></span>
                       </button>
                       <button class="btn node-button" type="button"
-                              ng-if="model.get('cellType') !== 'const' && 
+                              ng-if="model.get('cellType') !== 'const' &&
                                model.get('cellType') !== 'src'"
                               ng-class="{'active': currentView === 'STATISTICS'}"
                               ng-click="toggleStatistics()">
@@ -63,6 +64,8 @@ export default (app) => {
                     ng-if="ifCellType('src')"
                     ng-show="showCellBody()"
                     data-model="model"
+                    data-node="node"
+                    data-tick="updateTick"
                     on-change="onChange({sourceId: sourceId, project: project, band: band})"
                   ></rf-input-node>
                   <rf-operation-node
@@ -74,12 +77,14 @@ export default (app) => {
                     ng-if="ifCellType('const')"
                     ng-show="showCellBody()"
                     data-model="model"
+                    data-node="node"
                     on-change="onChange({override: override})"
                   ></rf-constant-node>
                   <rf-classify-node
                     ng-if="ifCellType('classify')"
                     ng-show="showCellBody()"
                     data-model="model"
+                    data-node="node"
                     data-child="children[0]"
                     on-change="onChange({override: override})"
                   ></rf-classify-node>
@@ -316,6 +321,8 @@ export default (app) => {
                     if (this.model.get('toolrun')) {
                         this.scope.children =
                             getNodeChildren(this.model.get('toolrun'), this.model.get('id'));
+                        this.scope.node =
+                            findInToolDefinition(this.model.get('toolrun'), this.model.get('id'));
                     }
 
                     if (!this.scope.breakpoints) {
@@ -358,6 +365,8 @@ export default (app) => {
                         left: bbox.x * this.scale + origin.x,
                         top: bbox.y * this.scale + origin.y
                     });
+
+                    this.scope.updateTick = new Date().getTime();
                 },
                 removeBox: function () {
                     this.$box.remove();
@@ -404,6 +413,24 @@ export default (app) => {
                 }
             }
             return outQ;
+        }
+
+        findInToolDefinition(toolDefinition, id) {
+            let tool = toolDefinition.executionParameters || toolDefinition;
+            let inQ = [tool];
+            while (inQ.length) {
+                let node = inQ.pop();
+                if (node.id === id) {
+                    return node;
+                }
+                if (node.args) {
+                    inQ = [
+                        ...inQ,
+                        ...node.args.map(a => Object.assign({}, a, { parent: node }))
+                    ];
+                }
+            }
+            return false;
         }
 
         getNodeLabel(json) {
