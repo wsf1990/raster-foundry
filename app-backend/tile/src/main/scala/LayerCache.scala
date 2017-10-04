@@ -177,11 +177,9 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     user: User,
     voidCache: Boolean = false
   ): OptionT[Future, ToolRun] = {
-    rfCache.cachingOptionT(s"tool+run-$toolRunId-${user.id}", doCache = cacheConfig.tool.enabled) {
-      for {
-        toolRun <- OptionT(database.db.run(ToolRuns.getToolRun(toolRunId, user)))
-      } yield toolRun
-    }
+    for {
+      toolRun <- OptionT(database.db.run(ToolRuns.getToolRun(toolRunId, user)))
+    } yield toolRun
   }
 
   /** Calculate all of the prerequisites to evaluation of an AST over a set of tile sources */
@@ -194,17 +192,15 @@ object LayerCache extends Config with LazyLogging with KamonTrace {
     traceName("LayerCache.toolEvalRequirements") {
       val cacheKey = s"ast+params-$toolRunId-${subNode}-${user.id}"
       if (voidCache) rfCache.delete(cacheKey)
-      rfCache.cachingOptionT(cacheKey) {
-        traceName("LayerCache.toolEvalRequirements (no cache)") {
-          for {
-            toolRun <- LayerCache.toolRun(toolRunId, user)
-            ast     <- OptionT.fromOption[Future](toolRun.executionParameters.as[MapAlgebraAST].toOption)
-            subAst <- OptionT.fromOption[Future](subNode match {
-                         case Some(id) => ast.find(id)
-                         case None => Some(ast)
-                       })
-          } yield subAst
-        }
+      traceName("LayerCache.toolEvalRequirements (no cache)") {
+        for {
+          toolRun <- LayerCache.toolRun(toolRunId, user)
+          ast <- OptionT.fromOption[Future](toolRun.executionParameters.as[MapAlgebraAST].toOption)
+          subAst <- OptionT.fromOption[Future](subNode match {
+            case Some(id) => ast.find(id)
+            case None => Some(ast)
+          })
+        } yield subAst
       }
     }
 
