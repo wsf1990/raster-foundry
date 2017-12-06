@@ -66,4 +66,5 @@ object Dependencies {
   val mamlJvm                 = "com.azavea"                  %% "maml-jvm"                          % Version.maml
   val mamlSpark               = "com.azavea"                  %% "maml-spark"                        % Version.maml
   val nimbusJose              = "com.guizmaii"                %% "scala-nimbus-jose-jwt"             % Version.nimbusJose
+  val slickMigrationAPI       = "io.github.nafg"              %% "slick-migration-api"               % Version.slickMigrationAPI
 }
