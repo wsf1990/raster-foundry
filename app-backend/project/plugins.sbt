@@ -7,6 +7,8 @@ resolvers += Classpaths.typesafeResolver
 
 resolvers += Resolver.bintrayIvyRepo("kamon-io", "sbt-plugins")
 
+addSbtPlugin("org.ensime" % "sbt-ensime" % "2.1.0")
+
 addSbtPlugin("me.lessis" % "bintray-sbt" % "0.3.0")
 
 addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.1.10")

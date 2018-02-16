@@ -242,12 +242,12 @@ lazy val batch = Project("batch", file("batch"))
     )
   )
 
-import io.gatling.sbt.GatlingPlugin
+// import io.gatling.sbt.GatlingPlugin
 lazy val tile = Project("tile", file("tile"))
   .dependsOn(database, datamodel, common % "test->test;compile->compile")
   .dependsOn(tool)
   .dependsOn(batch)
-  .enablePlugins(GatlingPlugin)
+  // .enablePlugins(GatlingPlugin)
   .settings(commonSettings:_*)
   .settings({
     libraryDependencies ++= loggingDependencies ++ testDependencies ++
@@ -256,15 +256,15 @@ lazy val tile = Project("tile", file("tile"))
       Dependencies.geotrellisSpark,
       Dependencies.geotrellisS3,
       Dependencies.akkaSprayJson,
-      Dependencies.akkaCirceJson,
-      Dependencies.circeCore % "it,test",
-      Dependencies.circeGeneric % "it,test",
-      Dependencies.circeParser % "it,test",
-      Dependencies.circeOptics % "it,test",
-      Dependencies.scalajHttp % "it,test",
-      Dependencies.gatlingApp,
-      Dependencies.gatlingTest,
-      Dependencies.gatlingHighcharts
+      Dependencies.akkaCirceJson
+      // Dependencies.circeCore % "it,test",
+      // Dependencies.circeGeneric % "it,test",
+      // Dependencies.circeParser % "it,test",
+      // Dependencies.circeOptics % "it,test",
+      // Dependencies.scalajHttp % "it,test",
+      // Dependencies.gatlingApp,
+      // Dependencies.gatlingTest,
+      // Dependencies.gatlingHighcharts
     )
   })
   .settings(assemblyMergeStrategy in assembly := {
