@@ -121,34 +121,6 @@ export default (app) => {
                 APP_CONFIG.clientId, APP_CONFIG.auth0Domain, loginOptions
             );
 
-            // TODO if custom tenant exists, do this
-            this.loginLock.once('signin ready', () => {
-                // TODO figure out how to configure styles for custom tenant
-                const button = $(`
-                    <button class="auth0-lock-social-button auth0-lock-social-big-button"
-                            data-provider="soundcloud"
-                    >
-                      <div class="auth0-lock-social-button-icon">
-                      </div>
-                      <div class="auth0-lock-social-button-text">Login with test tenant</span>
-                    </button>
-                `);
-
-
-                const socialButtonsContainer = $(
-                    $.find(`#auth0-lock-container-${this.loginLock.id}`)
-                ).find('.auth0-lock-social-buttons-container');
-                button.appendTo(socialButtonsContainer);
-                button.on('click', () => {
-                    const nonce = this.randomString(35);
-                    this.localStorage.set('nonce', nonce);
-                    // eslint-disable-next-line
-                    const tentantUrl = `https://raster-foundry-dev.auth0.com/authorize/?client_id=544Cz1V8tqezMCbyN8mNJmlzOpd8H4ex&response_type=token id_token&redirect_uri=http://localhost:9091/login&connection=raster-foundry-dev-alt-connection&nonce=${nonce}&scope=openid profile email`;
-                    console.log('redirecting to tenant url: ', tentantUrl);
-                    window.location = tentantUrl;
-                });
-            });
-
             let tokenCreateOptions = {
                 oidcConformant: true,
                 initialScreen: 'login',
@@ -192,6 +164,57 @@ export default (app) => {
             this.tokenCreateLock = new Auth0Lock(
                 APP_CONFIG.clientId, APP_CONFIG.auth0Domain, tokenCreateOptions
             );
+
+            const auth0Tenant = BUILDCONFIG.AUTH0_TENANT;
+
+            if (auth0Tenant) {
+                const providerName = auth0Tenant.provider;
+                const providerText = auth0Tenant.providerText;
+                const clientId = auth0Tenant.clientId;
+                const connection = auth0Tenant.connection;
+
+                const buttonTemplate = `
+                    <button type="button"
+                            class="auth0-lock-social-button auth0-lock-social-big-button"
+                            data-provider="${providerName}">
+                        <div class="auth0-lock-social-button-icon">
+                        </div>
+                        <div class="auth0-lock-social-button-text">${providerText}</span>
+                    </button>
+                `;
+
+                this.loginLock.once('signin ready', () => {
+                    const button = $(buttonTemplate);
+
+                    const socialButtonsContainer = $(
+                        $.find(`#auth0-lock-container-${this.loginLock.id}`)
+                    ).find('.auth0-lock-social-buttons-container');
+                    button.appendTo(socialButtonsContainer);
+                    button.on('click', () => {
+                        const nonce = this.randomString(35);
+                        this.localStorage.set('nonce', nonce);
+                        // eslint-disable-next-line
+                        const tentantUrl = `https://${this.APP_CONFIG.auth0Domain}/authorize/?client_id=${clientId}&response_type=token id_token&scope=openid profile email&redirect_uri=${this.getBaseURL()}/login&connection=${connection}&nonce=${nonce}`;
+                        window.location = tentantUrl;
+                    });
+                });
+
+                this.tokenCreateLock.once('signin ready', () => {
+                    const button = $(buttonTemplate);
+
+                    const socialButtonsContainer = $(
+                        $.find(`#auth0-lock-container-${this.tokenCreateLock.id}`)
+                    ).find('.auth0-lock-social-buttons-container');
+                    button.appendTo(socialButtonsContainer);
+                    button.on('click', () => {
+                        const nonce = this.randomString(35);
+                        this.localStorage.set('nonce', nonce);
+                        // eslint-disable-next-line
+                        const tentantUrl = `https://${this.APP_CONFIG.auth0Domain}/authorize/?client_id=${clientId}&response_type=code&scope=openid offline_access&redirect_uri=${this.getBaseURL()}/settings/tokens/api&connection=${connection}&nonce=${nonce}`;
+                        window.location = tentantUrl;
+                    });
+                });
+            }
 
 
             this.tokenCreateLock.on('authenticated', this.onTokenCreated.bind(this));
