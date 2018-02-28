@@ -27,6 +27,7 @@ export default (app) => {
             this.intercomService = intercomService;
             this.rollbarWrapperService = rollbarWrapperService;
             this.APP_CONFIG = APP_CONFIG;
+            this.auth0Tenant = BUILDCONFIG.AUTH0_TENANT;
             this._redux = {};
             $ngRedux.connect((state) => {
                 return {
@@ -165,13 +166,11 @@ export default (app) => {
                 APP_CONFIG.clientId, APP_CONFIG.auth0Domain, tokenCreateOptions
             );
 
-            const auth0Tenant = BUILDCONFIG.AUTH0_TENANT;
-
-            if (auth0Tenant) {
-                const providerName = auth0Tenant.provider;
-                const providerText = auth0Tenant.providerText;
-                const clientId = auth0Tenant.clientId;
-                const connection = auth0Tenant.connection;
+            if (this.auth0Tenant) {
+                const providerName = this.auth0Tenant.provider;
+                const providerText = this.auth0Tenant.providerText;
+                const clientId = this.auth0Tenant.clientId;
+                const connection = this.auth0Tenant.connection;
 
                 const buttonTemplate = `
                     <button type="button"
@@ -232,10 +231,25 @@ export default (app) => {
             return `${protocol}://${host}${formattedPort}`;
         }
 
+        tenantLogin() {
+            const clientId = this.auth0Tenant.clientId;
+            const connection = this.auth0Tenant.connection;
+
+            const nonce = this.randomString(35);
+            this.localStorage.set('nonce', nonce);
+            // eslint-disable-next-line
+            const tentantUrl = `https://${this.APP_CONFIG.auth0Domain}/authorize/?client_id=${clientId}&response_type=token id_token&scope=openid profile email&redirect_uri=${this.getBaseURL()}/login&connection=${connection}&nonce=${nonce}`;
+            window.location = tentantUrl;
+        }
+
         login(accessToken, idToken) {
             try {
                 if (!accessToken) {
-                    this.loginLock.show();
+                    if (this.auth0Tenant && this.auth0Tenant.autoRedirect) {
+                        this.tenantLogin();
+                    } else {
+                        this.loginLock.show();
+                    }
                 } else if (!this.jwtHelper.isTokenExpired(accessToken)) {
                     this.onLogin({accessToken, idToken});
                 } else if (this.jwtHelper.isTokenExpired(accessToken)) {
