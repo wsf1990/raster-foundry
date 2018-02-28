@@ -273,6 +273,7 @@ export default (app) => {
         }
 
         onLogin(authResult) {
+            // TODO validate nonce
             this.localStorage.set('accessToken', authResult.accessToken);
             this.localStorage.set('idToken', authResult.idToken);
             this.profile = this.jwtHelper.decodeToken(authResult.idToken);
