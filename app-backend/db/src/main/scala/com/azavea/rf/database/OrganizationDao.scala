@@ -188,4 +188,35 @@ object OrganizationDao extends Dao[Organization] with LazyLogging {
     )
     UserGroupRoleDao.deactivateUserGroupRoles(userGroup, actingUser)
   }
+
+  def setUserOrganization(actingUser: User, subjectId: String, organizationId: UUID, groupRole: GroupRole): ConnectionIO[List[UserGroupRole]] = {
+    for {
+      subjectUser <- UserDao.query.filter(fr"id = ${subjectId}").selectOption
+      oldOrgRoles <- {
+        subjectUser match {
+          case Some(su) =>
+            UserGroupRoleDao.listByUserAndGroupType(su, GroupType.Organization)
+          case None => throw new IllegalArgumentException(s"User not in database: ${subjectId}")
+        }
+      }
+      deactivatedOrgRoles <- {
+        // This is OK because we only expect there to be a single org role at a time
+        subjectUser match {
+          case Some(su) =>
+            oldOrgRoles.traverse(
+              (role) => {
+                OrganizationDao.deactivateUserRoles(actingUser, su.id, role.groupId)
+              })
+          case None => throw new IllegalArgumentException(s"User not in database: ${subjectId}")
+        }
+      }
+      newOrgRoles <- {
+        subjectUser match {
+          case Some(su) =>
+            OrganizationDao.setUserRole(actingUser, su.id, organizationId, groupRole)
+          case None => throw new IllegalArgumentException(s"User not in database: ${subjectId}")
+        }
+      }
+    } yield (newOrgRoles ++ deactivatedOrgRoles.flatten)
+  }
 }
