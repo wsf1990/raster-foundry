@@ -96,7 +96,11 @@ services:
     external_links:
       - postgres:database.service.rasterfoundry.internal
       - api-server:rasterfoundry.com
+      - statsd
     env_file: .env
+    ports:
+      - "9900:9900"
+      - "9020:9020"
     environment:
       - RF_HOST=http://rasterfoundry.com:9000
       - LOCAL_INGEST_CORES=2
